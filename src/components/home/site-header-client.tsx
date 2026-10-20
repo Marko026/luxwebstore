@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AuthModal } from "@/components/auth/auth-modal";
+import { useBag } from "@/components/bag/bag-provider";
 import { authClient } from "@/lib/auth-client";
 import { ProductCard } from "@/components/product/product-card";
 import { categoryHref, type CategoryLink, type Product } from "@/lib/products";
@@ -65,6 +66,7 @@ export function SiteHeaderClient({
   const [authOpen, setAuthOpen] = useState(false);
   const { data: session } = authClient.useSession();
   const user = session?.user;
+  const { units } = useBag();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -206,8 +208,13 @@ export function SiteHeaderClient({
             <a href="#contact" className={`group mr-1 hidden items-center gap-2 lg:flex ${label}`}>
               <PlusIcon /> <span className="link-wipe">Contact Us</span>
             </a>
-            <a href="#bag" aria-label="Shopping bag" className="p-1 transition-opacity duration-(--t-ui) ease-lux hover:opacity-60">
+            <a
+              href="#bag"
+              aria-label={units > 0 ? `Shopping bag (${units})` : "Shopping bag"}
+              className={`flex items-center gap-1 p-1 transition-opacity duration-(--t-ui) ease-lux hover:opacity-60 ${label}`}
+            >
               <BagIcon />
+              {units > 0 && <span aria-hidden>{units}</span>}
             </a>
             {user ? (
               <span className={`hidden items-center gap-3 sm:flex ${label}`}>

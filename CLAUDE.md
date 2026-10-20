@@ -11,7 +11,8 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - `npm run db:push` — dev only; can drop data, never against a production DB
 - `npm run db:studio`
 - `npm run db:seed` — upserts the sample catalog (idempotent)
-- No test script exists yet.
+- `npm test` — Vitest against PGlite (in-process Postgres) with the Drizzle migrations applied, a fresh database per test file; no network or secrets. Tests go through the Bag module (`src/lib/bag.ts`).
+- Lockfile changes: use `npx npm@10 install ...` on Windows. npm 11 drops the top-level `@emnapi/*` entries and `npm ci` on Linux (CI) then fails.
 
 ## Layout
 - `src/db/schema.ts` — Drizzle tables: `categories`, `products` (stock is a column); re-exports `auth-schema.ts`
@@ -34,7 +35,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - Next 16 has breaking changes: read `node_modules/next/dist/docs/` before writing Next code.
 - Secrets live in `.env` (see `.env.example`). Never commit or print them.
 - Ask before running any migration or `db:push`.
-- Before calling work done, run `npm run lint`, `npm run typecheck` and `npm run build`. CI runs lint and typecheck on every PR.
+- Before calling work done, run `npm test`, `npm run lint`, `npm run typecheck` and `npm run build`. CI runs lint and typecheck on every PR.
 - Before checking UI in the browser pane, read `docs/agents/browser-checks.md`.
 
 ## Agent skills

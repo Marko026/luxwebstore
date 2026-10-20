@@ -7,6 +7,7 @@ import { ChevronIcon } from "@/components/home/icons";
 import { SiteFooter } from "@/components/home/site-footer";
 import { SiteHeader } from "@/components/home/site-header";
 import { ProductCard } from "@/components/product/product-card";
+import { AddToBagButton } from "@/components/product/add-to-bag-button";
 import { frame } from "@/components/product/frame";
 import { ProductGallery } from "@/components/product/product-gallery";
 import { getProduct, getProductSlugs, getRelatedProducts } from "@/db/queries/products";
@@ -115,13 +116,7 @@ async function ProductDetails({ params }: { params: PageProps<"/products/[slug]"
             {state === "low" && <span className="text-muted">· order soon</span>}
           </p>
 
-          <button
-            type="button"
-            disabled={soldOut}
-            className="btn btn-dark mt-4 h-12 w-full disabled:pointer-events-none disabled:opacity-40"
-          >
-            {soldOut ? "Sold out" : "Add to bag"}
-          </button>
+          <AddToBagButton slug={product.slug} soldOut={soldOut} />
           {soldOut && (
             <a href="#contact" className="mt-4 inline-block text-xs">
               <span className="link-wipe">Contact us about availability</span>

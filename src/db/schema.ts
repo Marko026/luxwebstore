@@ -2,7 +2,8 @@
 // Better Auth tables live in auth-schema.ts, generated (not hand-edited) with:
 // npx auth generate --config src/lib/auth.ts --output src/db/auth-schema.ts
 import { relations, sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { user } from "./auth-schema";
 
 export type ProductImage = { src: string; alt: string };
 
@@ -41,6 +42,33 @@ export const products = pgTable(
     index("products_category_id_idx").on(t.categoryId),
     check("products_price_cents_check", sql`${t.priceCents} >= 0`),
     check("products_stock_check", sql`${t.stock} >= 0`),
+  ],
+);
+
+/**
+ * One product in a User's Bag. A Bag is the set of Bag items of one user; there is no Bag table.
+ * No price is stored: the Bag always shows the current catalogue price.
+ */
+export const bagItems = pgTable(
+  "bag_items",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    quantity: integer().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.productId] }),
+    index("bag_items_product_id_idx").on(t.productId),
+    check("bag_items_quantity_check", sql`${t.quantity} >= 1`),
   ],
 );
 
