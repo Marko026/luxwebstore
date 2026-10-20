@@ -57,6 +57,7 @@ function ErrorIcon() {
  */
 export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const pressedOnBackdrop = useRef(false);
   const [mode, setMode] = useState<Mode>("sign-in");
   const [errors, setErrors] = useState<Errors>({});
   const [pending, setPending] = useState(false);
@@ -137,8 +138,11 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
         switchMode("sign-in");
         onClose();
       }}
-      // A click on the backdrop lands on the dialog element itself; the padding sits on the inner div so clicks there do not
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      // A click on the backdrop lands on the dialog element itself; the padding sits on the inner div so clicks there do not.
+      // A drag from the form out to the backdrop also clicks the dialog (common ancestor), so the press must start there too.
+      // Closing on pointerdown instead would let a tap fall through to the page under the closed dialog.
+      onPointerDown={(e) => (pressedOnBackdrop.current = e.target === e.currentTarget)}
+      onClick={(e) => pressedOnBackdrop.current && e.target === e.currentTarget && onClose()}
       className="m-auto w-[min(28rem,calc(100%-2rem))] bg-paper text-ink backdrop:bg-scrim backdrop:backdrop-blur-[15px]"
     >
       <div className="p-8 sm:p-12">
