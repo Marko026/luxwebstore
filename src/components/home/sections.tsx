@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { categoryTiles, featuredCollections, hero, services } from "@/lib/catalog";
 
@@ -43,9 +44,9 @@ export function Hero() {
           <span className="block">{hero.label}</span>
         </h1>
         <div className="hero-line overflow-hidden p-1" style={{ "--d": "0.8s" } as CSSProperties}>
-          <a href={hero.href} className="btn btn-light h-12">
+          <Link href={hero.href} className="btn btn-light h-12">
             Shop now
-          </a>
+          </Link>
         </div>
       </div>
     </section>
@@ -59,7 +60,7 @@ export function CategoryRow() {
       <ul className="grid grid-cols-2 lg:grid-cols-4">
         {categoryTiles.map((tile) => (
           <li key={tile.label}>
-            <a href={tile.href} className="group block text-center">
+            <Link href={tile.href} className="group block text-center">
               <span data-reveal="img" className="relative block aspect-square overflow-hidden">
                 <Image
                   src={tile.photo.src}
@@ -70,7 +71,7 @@ export function CategoryRow() {
                 />
               </span>
               <span className="block px-2.5 pt-6 pb-10 text-xs lg:pt-14 lg:pb-8">{tile.label}</span>
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
@@ -99,9 +100,9 @@ export function FeaturedCollections() {
               <Line>{item.label}</Line>
             </h2>
             <Line i={1}>
-              <a href={item.href} className="btn btn-outline m-1 h-12">
+              <Link href={item.href} className="btn btn-outline m-1 h-12">
                 Shop now
-              </a>
+              </Link>
             </Line>
           </div>
         </div>

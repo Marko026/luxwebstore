@@ -65,20 +65,20 @@ export const photos = {
 } satisfies Record<string, Photo>;
 
 /** Full-bleed hero: one label and one button. */
-export const hero = { label: "Women's Handbags", href: "#", photo: photos.hero };
+export const hero = { label: "Women's Handbags", href: "/products", photo: photos.hero };
 
-/** Row of four packshots under the hero. */
+/** Row of four packshots under the hero; each links to its category page (slugs as seeded in src/db/seed.ts). */
 export const categoryTiles = [
-  { label: "Women's Top-Handle Bags", href: "#", photo: photos.topHandle },
-  { label: "Women's Shoulder Bags", href: "#", photo: photos.shoulder },
-  { label: "Crossbody Bags", href: "#", photo: photos.crossbody },
-  { label: "Men's Bags", href: "#", photo: photos.satchel },
+  { label: "Women's Top-Handle Bags", href: "/category/womens-top-handle-bags", photo: photos.topHandle },
+  { label: "Women's Shoulder Bags", href: "/category/womens-shoulder-bags", photo: photos.shoulder },
+  { label: "Crossbody Bags", href: "/category/crossbody-bags", photo: photos.crossbody },
+  { label: "Men's Bags", href: "/category/mens-bags", photo: photos.satchel },
 ];
 
 /** The two half-width editorial images. */
 export const featuredCollections = [
-  { label: "Autumn Collection for Women", href: "#", photo: photos.edWomen, position: "50% 60%" },
-  { label: "Autumn Collection for Men", href: "#", photo: photos.edMen, position: "50% 30%" },
+  { label: "Autumn Collection for Women", href: "/products", photo: photos.edWomen, position: "50% 60%" },
+  { label: "Autumn Collection for Men", href: "/products", photo: photos.edMen, position: "50% 30%" },
 ];
 
 export const services = [

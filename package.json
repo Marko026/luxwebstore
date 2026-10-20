@@ -10,11 +10,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
+    "@better-auth/infra": "^0.4.19",
     "@neondatabase/serverless": "^1.2.0",
-    "better-auth": "^1.7.8",
+    "better-auth": "^1.7.9",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.1",
     "react": "19.3.0",
@@ -30,6 +32,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
