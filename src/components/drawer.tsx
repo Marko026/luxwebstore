@@ -3,11 +3,15 @@
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 import { CloseIcon } from "@/components/home/icons";
 
+const focusableSelector =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /**
  * Right-hand drawer (design reference §4): slides in from the right with the house easing over a blurred and dimmed
- * backdrop; full screen on phones, from sm a panel at least 440px wide. A modal dialog: while open the page can't scroll, focus moves
- * to the round close button, and Escape, the backdrop or that button call `onClose`; once closed, focus goes back to
- * whatever had it when the drawer opened. Stays mounted while closed (inert and hidden) so it can slide out.
+ * backdrop; full screen on phones, from sm a panel at least 440px wide. A modal dialog: while open the page can't
+ * scroll, focus moves to the round close button and Tab stays inside the panel, and Escape, the backdrop or that
+ * button call `onClose`; once closed, focus goes back to whatever had it when the drawer opened. Stays mounted while
+ * closed (inert and hidden) so it can slide out.
  * `children` fill the panel and scroll themselves; the close button sits over them, top right.
  */
 export function Drawer({
@@ -28,8 +32,19 @@ export function Drawer({
   children: ReactNode;
 }) {
   const closeButton = useRef<HTMLButtonElement>(null);
-  const onEscape = useEffectEvent((e: KeyboardEvent) => {
+  const panel = useRef<HTMLDivElement>(null);
+  // Escape closes; Tab and Shift+Tab wrap around inside the panel instead of reaching the page under the backdrop.
+  const onKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (e.key === "Escape") onClose();
+    if (e.key !== "Tab" || !panel.current) return;
+    const focusable = [...panel.current.querySelectorAll<HTMLElement>(focusableSelector)].filter(
+      (el) => !el.closest("[inert]"),
+    );
+    const outside = !panel.current.contains(document.activeElement);
+    if (outside || document.activeElement === (e.shiftKey ? focusable[0] : focusable.at(-1))) {
+      e.preventDefault();
+      (e.shiftKey ? focusable.at(-1) : focusable[0])?.focus();
+    }
   });
 
   useEffect(() => {
@@ -37,9 +52,9 @@ export function Drawer({
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.style.overflow = "hidden";
     closeButton.current?.focus();
-    window.addEventListener("keydown", onEscape);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("keydown", onEscape);
+      window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
       opener?.focus();
     };
@@ -62,6 +77,7 @@ export function Drawer({
         className="absolute inset-0 bg-scrim backdrop-blur-[15px]"
       />
       <div
+        ref={panel}
         id={id}
         role="dialog"
         aria-modal="true"
