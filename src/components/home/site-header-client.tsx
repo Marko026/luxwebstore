@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { authClient } from "@/lib/auth-client";
-import { categoryHref, type CategoryLink } from "@/lib/products";
+import { ProductCard } from "@/components/product/product-card";
+import { categoryHref, type CategoryLink, type Product } from "@/lib/products";
 import { BagIcon, ChevronIcon, CloseIcon, MenuIcon, PlusIcon, SearchIcon, UserIcon } from "./icons";
 import { Wordmark } from "./wordmark";
 
@@ -24,13 +25,24 @@ const account = ["My Orders", "Contact Us"];
 const chevron =
   "transition-[opacity,translate] duration-(--t-ui) ease-lux lg:-translate-x-1 lg:opacity-0 lg:group-hover:translate-x-0 lg:group-hover:opacity-100 lg:group-focus-visible:translate-x-0 lg:group-focus-visible:opacity-100";
 
+type PanelId = "bags" | "services";
+
 /**
- * Transparent over the hero, white once the page scrolls. From lg (1024px) a "Bags" button in the bar opens a panel
- * of category links (disclosure: aria-expanded, Esc closes and returns focus); on phones and tablets the same links
- * are the second level of a right-hand drawer, opened by the hamburger. Categories come from the database.
+ * Transparent over the hero, white once the page scrolls. From lg (1024px) the bar shows the main sections:
+ * New Arrivals as a link, Bags and Services as buttons that open a panel (disclosure: aria-expanded, Esc closes and
+ * returns focus); the Bags panel also shows the newest products. On phones and tablets the same sections are the
+ * levels of a right-hand drawer, opened by the hamburger. Categories and products come from the database.
  * Pages without a full-bleed hero pass `overlay={false}` to keep it white from the start.
  */
-export function SiteHeaderClient({ overlay = true, categories }: { overlay?: boolean; categories: CategoryLink[] }) {
+export function SiteHeaderClient({
+  overlay = true,
+  categories,
+  newArrivals,
+}: {
+  overlay?: boolean;
+  categories: CategoryLink[];
+  newArrivals: Product[];
+}) {
   const bags: MenuItem = {
     label: "Bags",
     children: [
@@ -38,11 +50,15 @@ export function SiteHeaderClient({ overlay = true, categories }: { overlay?: boo
       ...categories.map((c) => ({ label: c.name, href: categoryHref(c.slug) })),
     ],
   };
+  const panels: { id: PanelId; label: string; links: MenuLink[] }[] = [
+    { id: "bags", label: bags.label, links: bags.children! },
+    { id: "services", label: "Services", links: [...services[0].children!, { label: "Store Locator", href: "#services" }] },
+  ];
   const [scrolled, setScrolled] = useState(false);
-  const [bagsOpen, setBagsOpen] = useState(false);
-  const bagsButton = useRef<HTMLButtonElement>(null);
-  const bagsMenu = useRef<HTMLDivElement>(null);
-  const solid = !overlay || scrolled || bagsOpen;
+  const [panel, setPanel] = useState<PanelId | null>(null);
+  const panelButtons = useRef<Partial<Record<PanelId, HTMLButtonElement | null>>>({});
+  const desktopNav = useRef<HTMLElement>(null);
+  const solid = !overlay || scrolled || panel !== null;
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<MenuItem | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -67,18 +83,17 @@ export function SiteHeaderClient({ overlay = true, categories }: { overlay?: boo
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // Desktop Bags panel: Esc closes it and puts focus back on its button; a click outside closes it.
+  // Desktop panels: Esc closes the open one and puts focus back on its button; a click outside the bar closes it.
   useEffect(() => {
-    if (!bagsOpen) return;
+    if (!panel) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setBagsOpen(false);
-        bagsButton.current?.focus();
+        setPanel(null);
+        panelButtons.current[panel]?.focus();
       }
     };
     const onPointer = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (!bagsMenu.current?.contains(target) && !bagsButton.current?.contains(target)) setBagsOpen(false);
+      if (!desktopNav.current?.contains(e.target as Node)) setPanel(null);
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("pointerdown", onPointer);
@@ -86,7 +101,7 @@ export function SiteHeaderClient({ overlay = true, categories }: { overlay?: boo
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onPointer);
     };
-  }, [bagsOpen]);
+  }, [panel]);
 
   // The hamburger is gone from lg up, so a drawer left open while the window widens closes itself.
   useEffect(() => {
@@ -121,37 +136,68 @@ export function SiteHeaderClient({ overlay = true, categories }: { overlay?: boo
         }`}
       >
         <div className="mx-auto grid h-16 max-w-page grid-cols-[1fr_auto_1fr] items-center px-gutter lg:h-18 xl:px-0">
-          {/* desktop: Bags opens a panel of categories; below lg they live in the drawer */}
-          <nav aria-label="Categories" className="hidden lg:block">
-            <button
-              ref={bagsButton}
-              type="button"
-              onClick={() => setBagsOpen((v) => !v)}
-              aria-expanded={bagsOpen}
-              aria-controls="bags-menu"
-              className={`group flex items-center gap-2 ${label}`}
-            >
-              <span className="link-reveal">{bags.label}</span>
-              <ChevronIcon
-                className={`transition-transform duration-(--t-ui) ease-lux ${bagsOpen ? "-rotate-90" : "rotate-90"}`}
-              />
-            </button>
-            <div
-              ref={bagsMenu}
-              id="bags-menu"
-              hidden={!bagsOpen}
-              className="absolute inset-x-0 top-full border-t border-line bg-paper text-ink"
-            >
-              <ul className="mx-auto flex max-w-page flex-wrap gap-x-10 gap-y-4 px-gutter py-8 text-sm xl:px-0">
-                {bags.children!.map((item) => (
-                  <li key={item.href}>
-                    <Link href={item.href} onClick={() => setBagsOpen(false)} className="link-wipe">
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {/* desktop: the main sections; Bags and Services open a panel. Below lg they live in the drawer */}
+          <nav ref={desktopNav} aria-label="Main" className="hidden lg:block">
+            <ul className={`flex items-center gap-8 ${label}`}>
+              <li>
+                <Link href="/new-arrivals" className="link-reveal">
+                  New Arrivals
+                </Link>
+              </li>
+              {panels.map((p) => (
+                <li key={p.id}>
+                  <button
+                    ref={(el) => {
+                      panelButtons.current[p.id] = el;
+                    }}
+                    type="button"
+                    onClick={() => setPanel((v) => (v === p.id ? null : p.id))}
+                    aria-expanded={panel === p.id}
+                    aria-controls={`${p.id}-menu`}
+                    className="group flex items-center gap-2"
+                  >
+                    <span className="link-reveal">{p.label}</span>
+                    <ChevronIcon
+                      className={`transition-transform duration-(--t-ui) ease-lux ${panel === p.id ? "-rotate-90" : "rotate-90"}`}
+                    />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {panels.map((p) => (
+              <div
+                key={p.id}
+                id={`${p.id}-menu`}
+                hidden={panel !== p.id}
+                className="absolute inset-x-0 top-full border-t border-line bg-paper text-ink"
+              >
+                <div className="mx-auto flex max-w-page justify-between gap-10 px-gutter pt-8 xl:px-0">
+                  <ul className="space-y-4 pb-8 text-sm">
+                    {p.links.map((item) => (
+                      <li key={item.label}>
+                        <Link href={item.href} onClick={() => setPanel(null)} className="link-wipe">
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  {p.id === "bags" && newArrivals.length > 0 && (
+                    <div className="w-sm">
+                      <Link href="/new-arrivals" onClick={() => setPanel(null)} className={`link-wipe ${label}`}>
+                        New Arrivals
+                      </Link>
+                      <ul className="mt-4 grid grid-cols-2">
+                        {newArrivals.map((product) => (
+                          <li key={product.slug} onClick={() => setPanel(null)}>
+                            <ProductCard product={product} sizes="12rem" />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </nav>
           <Link href="/" aria-label="Luxwebstore, home" className="col-start-1 row-start-1 lg:col-start-2">
             <Wordmark className="h-4 w-30 lg:h-5 lg:w-34" />
@@ -239,6 +285,11 @@ export function SiteHeaderClient({ overlay = true, categories }: { overlay?: boo
           >
             <nav aria-label="Main" inert={!!level} className="h-full w-1/2 overflow-y-auto px-8 pt-24 pb-10 sm:pl-16">
               <ul className="space-y-5">
+                <li>
+                  <Link href="/new-arrivals" onClick={close} className="link-wipe text-lg font-medium">
+                    New Arrivals
+                  </Link>
+                </li>
                 <li>
                   <button
                     type="button"
