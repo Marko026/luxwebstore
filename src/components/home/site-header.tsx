@@ -1,7 +1,8 @@
-import { getCategories } from "@/db/queries/products";
+import { getCategories, getNewArrivals } from "@/db/queries/products";
 import { SiteHeaderClient } from "./site-header-client";
 
-/** Reads the categories for the menu (cached, so it stays in the static shell) and hands them to the client header. */
+/** Reads the menu data (cached, so it stays in the static shell) and hands it to the client header. */
 export async function SiteHeader({ overlay }: { overlay?: boolean }) {
-  return <SiteHeaderClient overlay={overlay} categories={await getCategories()} />;
+  const [categories, newArrivals] = await Promise.all([getCategories(), getNewArrivals(2)]);
+  return <SiteHeaderClient overlay={overlay} categories={categories} newArrivals={newArrivals} />;
 }

@@ -1,6 +1,6 @@
 // Catalog reads. Cached so results land in the static shell (cacheComponents is on);
 // `minutes` keeps stock labels fresh within the hour, and the "products" tag allows revalidateTag after edits.
-import { asc, eq, ne } from "drizzle-orm";
+import { asc, desc, eq, ne } from "drizzle-orm";
 import { cacheLife, cacheTag } from "next/cache";
 import { db } from "@/db";
 import { categories, products } from "@/db/schema";
@@ -47,6 +47,19 @@ export async function getProduct(slug: string): Promise<Product | undefined> {
   cacheTag("products");
   const row = await db.query.products.findFirst({ where: eq(products.slug, slug), with: withCategory });
   return row && toProduct(row);
+}
+
+/** Most recently added products first. The seed inserts in one statement (same created_at), so id breaks ties. */
+export async function getNewArrivals(count = 8): Promise<Product[]> {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("products");
+  const rows = await db.query.products.findMany({
+    with: withCategory,
+    orderBy: [desc(products.createdAt), desc(products.id)],
+    limit: count,
+  });
+  return rows.map(toProduct);
 }
 
 /** Other products to suggest under a product. */
