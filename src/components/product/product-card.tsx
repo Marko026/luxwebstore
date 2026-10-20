@@ -10,13 +10,16 @@ export function ProductCard({ product, sizes }: { product: Product; sizes: strin
   return (
     <Link href={productHref(product.slug)} className="group block text-center">
       <span data-reveal="img" className="relative block aspect-square overflow-hidden">
-        <Image
-          src={photo.src}
-          alt={photo.alt}
-          fill
-          sizes={sizes}
-          className="object-contain transition-[scale] duration-(--t-image) ease-lux group-hover:scale-105"
-        />
+        {/* The DB allows a product without images: keep the empty tile rather than crash the listing */}
+        {photo && (
+          <Image
+            src={photo.src}
+            alt={photo.alt}
+            fill
+            sizes={sizes}
+            className="object-contain transition-[scale] duration-(--t-image) ease-lux group-hover:scale-105"
+          />
+        )}
       </span>
       <span className="block px-2.5 pt-6 text-xs lg:pt-10">{product.name}</span>
       <span className="block px-2.5 pt-1 pb-10 text-xs lg:pb-8">

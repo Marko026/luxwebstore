@@ -137,55 +137,57 @@ export function AuthModal({ open, onClose }: { open: boolean; onClose: () => voi
         switchMode("sign-in");
         onClose();
       }}
-      // A click on the backdrop lands on the dialog element itself
+      // A click on the backdrop lands on the dialog element itself; the padding sits on the inner div so clicks there do not
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="m-auto w-[min(28rem,calc(100%-2rem))] bg-paper p-8 text-ink backdrop:bg-scrim backdrop:backdrop-blur-[15px] sm:p-12"
+      className="m-auto w-[min(28rem,calc(100%-2rem))] bg-paper text-ink backdrop:bg-scrim backdrop:backdrop-blur-[15px]"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute top-4 right-4 grid size-10 place-items-center rounded-full bg-ink text-paper transition-[scale] duration-(--t-press) active:scale-95"
-      >
-        <CloseIcon />
-      </button>
-
-      <h2 id={`${id}-title`} className="text-xl font-thin">
-        {mode === "sign-in" ? "Sign in" : "Create an account"}
-      </h2>
-      <p className="mt-2 text-xs text-muted">
-        {mode === "sign-in" ? "New to Luxwebstore? " : "Already have an account? "}
+      <div className="p-8 sm:p-12">
         <button
           type="button"
-          onClick={() => switchMode(mode === "sign-in" ? "sign-up" : "sign-in")}
-          className="link-wipe text-ink"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-4 right-4 grid size-10 place-items-center rounded-full bg-ink text-paper transition-[scale] duration-(--t-press) active:scale-95"
         >
-          {mode === "sign-in" ? "Create an account" : "Sign in"}
+          <CloseIcon />
         </button>
-      </p>
 
-      {/* noValidate: the server's messages are the ones shown, under each field */}
-      <form key={mode} onSubmit={onSubmit} noValidate className="mt-8 space-y-6">
-        {mode === "sign-up" && field("name", "Name", { type: "text", autoComplete: "name" })}
-        {field("email", "Email", { type: "email", autoComplete: "email" })}
-        {field("password", "Password", {
-          type: "password",
-          autoComplete: mode === "sign-in" ? "current-password" : "new-password",
-        })}
-        {errors.form && (
-          <p className={`flex gap-2 border-l-2 border-error bg-error/5 px-4 py-3 text-xs font-medium text-error ${errorIn}`}>
-            <ErrorIcon />
-            {errors.form}
-          </p>
-        )}
-        {/* Announces errors to screen readers; the visible text is under each field */}
-        <p aria-live="polite" className="sr-only">
-          {Object.values(errors).join(" ")}
+        <h2 id={`${id}-title`} className="text-xl font-thin">
+          {mode === "sign-in" ? "Sign in" : "Create an account"}
+        </h2>
+        <p className="mt-2 text-xs text-muted">
+          {mode === "sign-in" ? "New to Luxwebstore? " : "Already have an account? "}
+          <button
+            type="button"
+            onClick={() => switchMode(mode === "sign-in" ? "sign-up" : "sign-in")}
+            className="link-wipe text-ink"
+          >
+            {mode === "sign-in" ? "Create an account" : "Sign in"}
+          </button>
         </p>
-        <button type="submit" disabled={pending} className="btn btn-dark h-12 w-full disabled:opacity-40">
-          {pending ? "Please wait…" : mode === "sign-in" ? "Sign in" : "Create account"}
-        </button>
-      </form>
+
+        {/* noValidate: the server's messages are the ones shown, under each field */}
+        <form key={mode} onSubmit={onSubmit} noValidate className="mt-8 space-y-6">
+          {mode === "sign-up" && field("name", "Name", { type: "text", autoComplete: "name" })}
+          {field("email", "Email", { type: "email", autoComplete: "email" })}
+          {field("password", "Password", {
+            type: "password",
+            autoComplete: mode === "sign-in" ? "current-password" : "new-password",
+          })}
+          {errors.form && (
+            <p className={`flex gap-2 border-l-2 border-error bg-error/5 px-4 py-3 text-xs font-medium text-error ${errorIn}`}>
+              <ErrorIcon />
+              {errors.form}
+            </p>
+          )}
+          {/* Announces errors to screen readers; the visible text is under each field */}
+          <p aria-live="polite" className="sr-only">
+            {Object.values(errors).join(" ")}
+          </p>
+          <button type="submit" disabled={pending} className="btn btn-dark h-12 w-full disabled:opacity-40">
+            {pending ? "Please wait…" : mode === "sign-in" ? "Sign in" : "Create account"}
+          </button>
+        </form>
+      </div>
     </dialog>
   );
 }
