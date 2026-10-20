@@ -24,9 +24,12 @@ export function BagProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId) return;
     let current = true;
-    getBagAction().then((b) => {
-      if (current) setBag({ ownerId: userId, units: b.units });
-    });
+    // On failure the count keeps what it showed; it reloads when the user changes or after the next add
+    getBagAction()
+      .then((b) => {
+        if (current) setBag({ ownerId: userId, units: b.units });
+      })
+      .catch((error) => console.error("Could not load the Bag", error));
     return () => {
       current = false;
     };
