@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AuthModal } from "@/components/auth/auth-modal";
 import { useBag } from "@/components/bag/bag-provider";
+import { Drawer } from "@/components/drawer";
 import { authClient } from "@/lib/auth-client";
 import { ProductCard } from "@/components/product/product-card";
 import { categoryHref, type CategoryLink, type Product } from "@/lib/products";
-import { BagIcon, ChevronIcon, CloseIcon, MenuIcon, PlusIcon, SearchIcon, UserIcon } from "./icons";
+import { BagIcon, ChevronIcon, MenuIcon, PlusIcon, SearchIcon, UserIcon } from "./icons";
 import { Wordmark } from "./wordmark";
 
 type MenuLink = { label: string; href: string };
@@ -62,7 +63,6 @@ export function SiteHeaderClient({
   const solid = !overlay || scrolled || panel !== null;
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState<MenuItem | null>(null);
-  const closeButton = useRef<HTMLButtonElement>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const { data: session } = authClient.useSession();
   const user = session?.user;
@@ -74,16 +74,6 @@ export function SiteHeaderClient({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    if (open) closeButton.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
 
   // Desktop panels: Esc closes the open one and puts focus back on its button; a click outside the bar closes it.
   useEffect(() => {
@@ -251,119 +241,86 @@ export function SiteHeaderClient({
         </div>
       </header>
 
-      {/* drawer */}
-      <div
-        inert={!open}
-        className={`fixed inset-0 z-40 transition-[opacity,visibility] duration-(--t-ui) ease-lux ${
-          open ? "visible opacity-100" : "invisible opacity-0"
-        }`}
-      >
-        <button
-          type="button"
-          aria-label="Close menu"
-          tabIndex={-1}
-          onClick={close}
-          className="absolute inset-0 bg-scrim backdrop-blur-[15px]"
-        />
+      <Drawer open={open} onClose={close} id="site-menu" label="Menu" closeLabel="Close menu">
+        {/* two-panel track: level 1 and level 2 slide horizontally */}
         <div
-          id="site-menu"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Menu"
-          className={`absolute inset-y-0 right-0 w-full overflow-hidden bg-paper text-ink transition-transform duration-(--t-ui) ease-lux sm:w-[clamp(27.5rem,36vw,38.75rem)] ${
-            open ? "translate-x-0" : "translate-x-full"
+          className={`flex h-full w-[200%] transition-transform duration-(--t-ui) ease-lux ${
+            level ? "-translate-x-1/2" : "translate-x-0"
           }`}
         >
-          <button
-            ref={closeButton}
-            type="button"
-            onClick={close}
-            aria-label="Close menu"
-            className="absolute top-4 right-4 z-10 grid size-12 place-items-center rounded-full bg-ink text-paper transition-[scale] duration-(--t-press) active:scale-95"
-          >
-            <CloseIcon />
-          </button>
+          <nav aria-label="Main" inert={!!level} className="h-full w-1/2 overflow-y-auto px-8 pt-24 pb-10 sm:pl-16">
+            <ul className="space-y-5">
+              <li>
+                <Link href="/new-arrivals" onClick={close} className="link-wipe text-lg font-medium">
+                  New Arrivals
+                </Link>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setLevel(bags)}
+                  className="group flex items-center gap-2 text-lg font-medium"
+                >
+                  {bags.label}
+                  <ChevronIcon className={chevron} />
+                </button>
+              </li>
+            </ul>
+            <ul className="mt-10 space-y-5">
+              <li>
+                <button type="button" onClick={() => setLevel(services)} className="group flex items-center gap-2">
+                  {services.label}
+                  <ChevronIcon className={chevron} />
+                </button>
+              </li>
+            </ul>
+            <ul className="mt-16 space-y-6 text-xs">
+              <li>
+                {user ? (
+                  <span className="flex gap-3">
+                    <span className="truncate">{user.name}</span>
+                    <button type="button" onClick={() => authClient.signOut()} className="link-wipe">
+                      Sign out
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={openAuth} aria-haspopup="dialog" className="link-wipe">
+                    Sign In
+                  </button>
+                )}
+              </li>
+              {account.map((item) => (
+                <li key={item}>
+                  <a href="#contact" onClick={close} className="link-wipe">
+                    {item}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-          {/* two-panel track: level 1 and level 2 slide horizontally */}
-          <div
-            className={`flex h-full w-[200%] transition-transform duration-(--t-ui) ease-lux ${
-              level ? "-translate-x-1/2" : "translate-x-0"
-            }`}
-          >
-            <nav aria-label="Main" inert={!!level} className="h-full w-1/2 overflow-y-auto px-8 pt-24 pb-10 sm:pl-16">
-              <ul className="space-y-5">
-                <li>
-                  <Link href="/new-arrivals" onClick={close} className="link-wipe text-lg font-medium">
-                    New Arrivals
+          <nav aria-label={level?.label ?? "Submenu"} inert={!level} className="h-full w-1/2 overflow-y-auto px-8 pt-24 pb-10 sm:pl-16">
+            <button
+              type="button"
+              onClick={() => setLevel(null)}
+              className={`group flex items-center gap-2 uppercase ${label}`}
+            >
+              <ChevronIcon className="rotate-180" />
+              <span className="link-wipe">Back</span>
+            </button>
+            <p className="mt-8 text-2xl font-thin">{level?.label}</p>
+            <ul className="mt-8 space-y-5">
+              {level?.children?.map((child) => (
+                <li key={child.label}>
+                  <Link href={child.href} onClick={close} className="link-wipe">
+                    {child.label}
                   </Link>
                 </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={() => setLevel(bags)}
-                    className="group flex items-center gap-2 text-lg font-medium"
-                  >
-                    {bags.label}
-                    <ChevronIcon className={chevron} />
-                  </button>
-                </li>
-              </ul>
-              <ul className="mt-10 space-y-5">
-                <li>
-                  <button type="button" onClick={() => setLevel(services)} className="group flex items-center gap-2">
-                    {services.label}
-                    <ChevronIcon className={chevron} />
-                  </button>
-                </li>
-              </ul>
-              <ul className="mt-16 space-y-6 text-xs">
-                <li>
-                  {user ? (
-                    <span className="flex gap-3">
-                      <span className="truncate">{user.name}</span>
-                      <button type="button" onClick={() => authClient.signOut()} className="link-wipe">
-                        Sign out
-                      </button>
-                    </span>
-                  ) : (
-                    <button type="button" onClick={openAuth} aria-haspopup="dialog" className="link-wipe">
-                      Sign In
-                    </button>
-                  )}
-                </li>
-                {account.map((item) => (
-                  <li key={item}>
-                    <a href="#contact" onClick={close} className="link-wipe">
-                      {item}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-
-            <nav aria-label={level?.label ?? "Submenu"} inert={!level} className="h-full w-1/2 overflow-y-auto px-8 pt-24 pb-10 sm:pl-16">
-              <button
-                type="button"
-                onClick={() => setLevel(null)}
-                className={`group flex items-center gap-2 uppercase ${label}`}
-              >
-                <ChevronIcon className="rotate-180" />
-                <span className="link-wipe">Back</span>
-              </button>
-              <p className="mt-8 text-2xl font-thin">{level?.label}</p>
-              <ul className="mt-8 space-y-5">
-                {level?.children?.map((child) => (
-                  <li key={child.label}>
-                    <Link href={child.href} onClick={close} className="link-wipe">
-                      {child.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          </div>
+              ))}
+            </ul>
+          </nav>
         </div>
-      </div>
+      </Drawer>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
