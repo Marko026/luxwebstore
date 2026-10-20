@@ -6,7 +6,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 
 ## Commands
 - Package manager: npm. Do not mix in pnpm/yarn (no second lockfile).
-- `npm run dev` / `build` / `lint`
+- `npm run dev` / `build` / `lint` / `typecheck`
 - `npm run db:generate` then `db:migrate` — schema changes (preferred, keeps migration history)
 - `npm run db:push` — dev only; can drop data, never against a production DB
 - `npm run db:studio`
@@ -20,6 +20,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - `npm run build` queries the DB (prerender), so it needs `DATABASE_URL` and migrated tables
 - `src/lib/auth.ts` (server) / `auth-client.ts` (client) — Better Auth
 - `src/app/api/auth/[...all]` — auth route handler
+- `docs/design-reference.md` — visual rules and deliberate departures (header, grid, buttons, drawer); read before UI or layout work
 
 ## Architecture notes
 - `src/db/index.ts` uses the `neon-http` Drizzle driver: no connection pool, no interactive transactions. Switch to `neon-serverless` if transactions are needed.
@@ -33,7 +34,8 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - Next 16 has breaking changes: read `node_modules/next/dist/docs/` before writing Next code.
 - Secrets live in `.env` (see `.env.example`). Never commit or print them.
 - Ask before running any migration or `db:push`.
-- Before calling work done, run `npm run lint` and `npm run build`.
+- Before calling work done, run `npm run lint`, `npm run typecheck` and `npm run build`. CI runs lint and typecheck on every PR.
+- Before checking UI in the browser pane, read `docs/agents/browser-checks.md`.
 
 ## Agent skills
 
