@@ -12,13 +12,13 @@ import { Wordmark } from "./wordmark";
 type MenuLink = { label: string; href: string };
 type MenuItem = { label: string; children?: MenuLink[] };
 
-const services: MenuItem[] = [
-  {
-    label: "Luxwebstore Services",
-    children: ["Book an Appointment", "Personalization", "Repairs", "Care Guide"].map((label) => ({ label, href: "#new" })),
-  },
-  { label: "Store Locator" },
-];
+const services: MenuItem = {
+  label: "Services",
+  children: [
+    ...["Book an Appointment", "Personalization", "Repairs", "Care Guide"].map((label) => ({ label, href: "#new" })),
+    { label: "Store Locator", href: "#services" },
+  ],
+};
 const account = ["My Orders", "Contact Us"];
 
 /** Chevron hidden until hover/focus on desktop, always shown beside the label on touch screens. */
@@ -52,7 +52,7 @@ export function SiteHeaderClient({
   };
   const panels: { id: PanelId; label: string; links: MenuLink[] }[] = [
     { id: "bags", label: bags.label, links: bags.children! },
-    { id: "services", label: "Services", links: [...services[0].children!, { label: "Store Locator", href: "#services" }] },
+    { id: "services", label: services.label, links: services.children! },
   ];
   const [scrolled, setScrolled] = useState(false);
   const [panel, setPanel] = useState<PanelId | null>(null);
@@ -302,20 +302,12 @@ export function SiteHeaderClient({
                 </li>
               </ul>
               <ul className="mt-10 space-y-5">
-                {services.map((item) => (
-                  <li key={item.label}>
-                    {item.children ? (
-                      <button type="button" onClick={() => setLevel(item)} className="group flex items-center gap-2">
-                        {item.label}
-                        <ChevronIcon className={chevron} />
-                      </button>
-                    ) : (
-                      <a href="#services" onClick={close} className="link-wipe">
-                        {item.label}
-                      </a>
-                    )}
-                  </li>
-                ))}
+                <li>
+                  <button type="button" onClick={() => setLevel(services)} className="group flex items-center gap-2">
+                    {services.label}
+                    <ChevronIcon className={chevron} />
+                  </button>
+                </li>
               </ul>
               <ul className="mt-16 space-y-6 text-xs">
                 <li>

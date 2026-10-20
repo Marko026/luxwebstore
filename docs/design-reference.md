@@ -71,6 +71,11 @@ kept extremely plain.
 **For luxwebstore:** a transparent-on-hero header with a centred name, icon actions on the right, and a
 drawer menu. Keep a visible label next to the hamburger on desktop (better discoverability than icon only).
 
+**Deliberate departure:** unlike the reference, the desktop bar (from 1024px) shows the main sections on the
+left: "New Arrivals" (link), "Bags" and "Services" (each opens a panel under the bar; Bags also shows the two
+newest products). The drawer, used below 1024px, carries the same sections. A small catalogue is easier to
+browse with its sections in view than behind a menu.
+
 ## 5. Product presentation and imagery
 
 **Measured**
