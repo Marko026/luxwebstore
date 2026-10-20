@@ -34,3 +34,17 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - Secrets live in `.env` (see `.env.example`). Never commit or print them.
 - Ask before running any migration or `db:push`.
 - Before calling work done, run `npm run lint` and `npm run build`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `Marko026/luxwebstore`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (created lazily). See `docs/agents/domain.md`.
