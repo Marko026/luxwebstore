@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bodoni_Moda, Outfit } from "next/font/google";
 import Script from "next/script";
+import { BagProvider } from "@/components/bag/bag-provider";
 import "./globals.css";
 
 // Variable font: one file covers weights 100-900 (we use 100 for statements, 400 body, 700 labels).
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Script id="js-flag" strategy="beforeInteractive">
           {`document.documentElement.classList.add("js")`}
         </Script>
-        {children}
+        <BagProvider>{children}</BagProvider>
       </body>
     </html>
   );
