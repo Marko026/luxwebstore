@@ -1,26 +1,305 @@
 @import "tailwindcss";
 
+/* Design tokens. Source: docs/design-reference.md.
+   Only these values exist: Tailwind's default palette, shadows and radii are switched off on purpose. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  /* page side padding: 16px on phone, 64px from lg (1024px) */
+  --gutter: 1rem;
+
+  /* motion: one tempo for the whole site */
+  --ease-lux: cubic-bezier(0.5, 0, 0, 1);
+  --t-press: 140ms; /* :active feedback only */
+  --t-ui: 800ms; /* header, drawer, buttons, links, crossfades, text reveals */
+  --t-image: 1200ms; /* images settling */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@media (min-width: 64rem) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --gutter: 4rem;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme {
+  /* colour: monochrome UI, colour comes from photography */
+  --color-*: initial;
+  --color-ink: #000000; /* text, primary button, footer field */
+  --color-paper: #ffffff; /* page ground */
+  --color-tile: #fbfbfb; /* product tile ground = packshot ground */
+  --color-line: rgb(0 0 0 / 0.15); /* form fields, accordions only */
+  --color-muted: #6b6b6b; /* secondary notes; 4.5:1 on paper and on tile */
+  --color-scrim: rgb(0 0 0 / 0.4); /* drawer backdrop */
+  --color-error: #b3261e; /* form errors only; 6.5:1 on paper */
+
+  /* type: one text family; a serif only for the wordmark */
+  --font-*: initial;
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bodoni), ui-serif, Georgia, serif;
+
+  /* tracking travels with each size (an em value set once on body would be inherited as a fixed px value) */
+  --text-*: initial;
+  --text-xs: 0.75rem; /* 12: product names, prices, utility links, button labels */
+  --text-xs--line-height: 1rem;
+  --text-xs--letter-spacing: -0.03em;
+  --text-sm: 0.875rem; /* 14 */
+  --text-sm--line-height: 1.25rem;
+  --text-sm--letter-spacing: -0.03em;
+  --text-base: 1rem; /* 16: body, section titles, captions on photos */
+  --text-base--line-height: 1.5rem;
+  --text-base--letter-spacing: -0.04em;
+  --text-lg: 1.25rem; /* 20: menu categories */
+  --text-lg--line-height: 1.5rem;
+  --text-lg--letter-spacing: -0.04em;
+  --text-xl: 1.5rem; /* 24 */
+  --text-xl--line-height: 2rem;
+  --text-xl--letter-spacing: -0.03em;
+  --text-2xl: 2rem; /* 32: statements, menu level-2 titles */
+  --text-2xl--line-height: 3rem;
+  --text-2xl--letter-spacing: -0.03em;
+
+  --tracking-*: initial;
+  --tracking-tight: -0.03em;
+  --tracking-normal: 0em;
+
+  /* layout */
+  --breakpoint-xl: 90rem; /* 1440 */
+  --breakpoint-2xl: initial;
+  --container-page: 82rem; /* 1312px: header and footer chrome */
+  --container-content: 66rem; /* 1056px: text sections, services */
+
+  /* shape: square corners; round only for icon buttons (rounded-full) */
+  --radius-*: initial;
+  --radius-sm: 0.125rem;
+
+  /* shadows only on what truly floats: drawer, dialog, popover */
+  --shadow-*: initial;
+  --shadow-float: 0 0.5rem 2rem rgb(0 0 0 / 0.12);
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial; /* taste-skill-ignore: this removes shadows, it does not add one */
+
+  --ease-*: initial;
+  --ease-lux: cubic-bezier(0.5, 0, 0, 1);
+}
+
+/* utilities that follow runtime variables: px-gutter */
+@theme inline {
+  --spacing-gutter: var(--gutter);
+}
+
+/* Text link: the underline slides out to the right while a new one enters from the left. */
+@utility link-wipe {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  padding-bottom: 2px;
+  text-decoration: none;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 1px; /* taste-skill-ignore: this is the link underline */
+    background: currentColor;
+    transition: translate calc(var(--t-ui) * 0.55) var(--ease-lux);
+  }
+  &::after {
+    translate: -101% 0;
+  }
+  &:hover::before,
+  &:focus-visible::before {
+    translate: 101% 0;
+  }
+  &:hover::after,
+  &:focus-visible::after {
+    translate: 0 0;
+    transition-delay: calc(var(--t-ui) * 0.45);
+  }
+}
+
+/* Navigation link: no underline at rest; on hover/focus one draws in from the left. */
+@utility link-reveal {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 2px;
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 1px; /* taste-skill-ignore: this is the link underline */
+    background: currentColor;
+    scale: 0 1;
+    transform-origin: left;
+    transition: scale calc(var(--t-ui) * 0.55) var(--ease-lux);
+  }
+  &:hover::after,
+  &:focus-visible::after {
+    scale: 1 1;
+  }
+}
+
+/* Button: on hover the fill insets (about 95% × 90%) while the label stays put.
+   Colours come from btn-light / btn-dark / btn-outline. */
+@utility btn {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  padding-inline: 1.5rem;
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  letter-spacing: var(--text-xs--letter-spacing);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--btn-ink);
+  background: var(--btn-bg);
+  border-radius: var(--radius-sm);
+  clip-path: inset(0 round var(--radius-sm));
+  transition:
+    clip-path var(--t-ui) var(--ease-lux),
+    scale var(--t-press) var(--ease-lux);
+  &:hover,
+  &:focus-visible {
+    clip-path: inset(5% 2.5% round var(--radius-sm));
+  }
+  &:active {
+    scale: 0.98;
+  }
+}
+
+@utility btn-light {
+  --btn-bg: var(--color-paper);
+  --btn-ink: var(--color-ink);
+}
+
+@utility btn-dark {
+  --btn-bg: var(--color-ink);
+  --btn-ink: var(--color-paper);
+}
+
+/* Outline variant: no fill to inset, so the frame itself draws in on hover. */
+@utility btn-outline {
+  --btn-bg: transparent;
+  --btn-ink: var(--color-paper);
+  clip-path: none !important;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgb(255 255 255 / 0.5); /* taste-skill-ignore: outline button frame */
+    transition: scale var(--t-ui) var(--ease-lux);
+  }
+  &:hover::before,
+  &:focus-visible::before {
+    scale: 0.95 0.9;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer base {
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    letter-spacing: var(--text-base--letter-spacing);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  img,
+  video {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  ::selection {
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Hero: pure CSS from first paint, no script needed. */
+    .hero-media img {
+      animation: settle var(--t-image) var(--ease-lux) both;
+    }
+    .hero-line > * {
+      animation: rise var(--t-ui) var(--ease-lux) both;
+      animation-delay: var(--d, 0s);
+    }
+
+    /* Scroll reveals. `.js` is set in <head> before first paint, so nothing flashes. */
+    .js [data-reveal="img"] img {
+      scale: 1.2;
+      transition: scale var(--t-image) var(--ease-lux);
+    }
+    .js [data-reveal="img"].is-in img {
+      scale: 1;
+    }
+    .js [data-reveal="line"] > * {
+      translate: 0 100%;
+      opacity: 0;
+      transition:
+        translate var(--t-ui) var(--ease-lux),
+        opacity var(--t-ui) var(--ease-lux);
+      transition-delay: calc(var(--i, 0) * 200ms);
+    }
+    .js [data-reveal="line"].is-in > * {
+      translate: 0 0;
+      opacity: 1;
+    }
+  }
+
+  @keyframes settle {
+    from {
+      scale: 1.2;
+    }
+  }
+
+  @keyframes rise {
+    from {
+      translate: 0 100%;
+      opacity: 0;
+    }
+  }
+
+  /* Reduced motion: decorative motion (scroll reveals, hero rise) is already off via the no-preference
+     block above. Functional transitions (drawer, fades, hover zoom) stay, so state changes never jump. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
 }
