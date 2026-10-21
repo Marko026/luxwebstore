@@ -152,7 +152,8 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
  * Moves every Checkout of `fromOwnerId` (a Guest who just signed in or signed up), open, paid or closed, to
  * `toOwnerId`, before the Guest is deleted with whatever is still theirs (ADR 0001). A payment in progress then
  * completes as the User's, and its units stay held. If both have an open Checkout, the older one is closed by the
- * closing rule; if it turns out paid, the newer one is closed instead, so the account keeps at most one open.
+ * closing rule. If it turns out paid, it is marked paid instead (its units stay out of Stock and completion still makes
+ * its Order, #25) and the newer one stays open, so the account keeps at most one open and loses no payment in progress.
  */
 export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: string, toOwnerId: string) {
   if (fromOwnerId === toOwnerId) return;
@@ -160,9 +161,13 @@ export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: str
   if (fromOpen && toOpen) {
     // Ids grow with time, so the smaller one started first
     const [older, newer] = fromOpen.id < toOpen.id ? [fromOpen, toOpen] : [toOpen, fromOpen];
-    if ((await closeCheckout(db, payments, older)) === "already-paid") await closeCheckout(db, payments, newer);
+    if ((await closeCheckout(db, payments, older)) === "already-paid") {
+      await db
+        .update(checkouts)
+        .set({ state: "paid" })
+        .where(and(eq(checkouts.id, older.id), eq(checkouts.state, "open")));
+    }
   }
-  // Fails on "one open Checkout per owner" if both are still open (both paid), rather than drop either
   await db.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
 }
 
