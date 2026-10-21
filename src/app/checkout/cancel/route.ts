@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
   if (sessionId && ownerId) {
     // Going home must not fail over it: the Checkout stays open, its units still count as the owner's in their Bag,
     // and their next start or the sweep closes it
+    // The session id comes from the address, so it is logged as an argument, never as the format string
     await cancelCheckout(db, stripePayments, ownerId, sessionId).catch((error) =>
-      console.error(`Could not cancel the Checkout of session ${sessionId}`, error),
+      console.error("Could not cancel the Checkout of session", sessionId, error),
     );
   }
   // `BagProvider` opens the drawer on arrival
