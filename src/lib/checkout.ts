@@ -106,7 +106,10 @@ export async function startCheckout(
       ...urls,
     });
   } catch (error) {
-    await closeOpenCheckout(db, held.checkoutId);
+    // The sweep closes it after its expiry if this fails; the caller still learns why the start failed
+    await closeOpenCheckout(db, held.checkoutId).catch((closeError) =>
+      console.error(`Could not close Checkout ${held.checkoutId}`, closeError),
+    );
     throw error;
   }
 

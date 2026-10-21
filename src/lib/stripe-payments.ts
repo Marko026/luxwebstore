@@ -18,7 +18,7 @@ let client: Stripe | undefined;
 // Created on first use, not at import, so `next build` needs no key
 function stripe() {
   const key = process.env.STRIPE_SECRET_KEY;
-  if (!key?.match(/^(sk|rk)_test_/)) throw new Error("STRIPE_SECRET_KEY must be a Stripe test-mode key");
+  if (!key?.startsWith("sk_test_")) throw new Error("STRIPE_SECRET_KEY must be a Stripe test-mode key");
   client ??= new Stripe(key);
   return client;
 }
@@ -91,7 +91,12 @@ export const stripePayments: Payments = {
       return "expired";
     } catch (error) {
       // Stripe expires only an open session. Otherwise it was paid, or it already expired on its own.
-      const session = await stripe().checkout.sessions.retrieve(sessionId);
+      // If Stripe cannot be reached at all, the expire error says why
+      const session = await stripe()
+        .checkout.sessions.retrieve(sessionId)
+        .catch(() => {
+          throw error;
+        });
       if (isPaid(session)) return "already-paid";
       if (session.status === "expired") return "expired";
       throw error;

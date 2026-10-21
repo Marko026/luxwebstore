@@ -143,7 +143,7 @@ export const checkoutItems = pgTable(
   ],
 );
 
-export const categoriesRelations =relations(categories, ({ many }) => ({
+export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));
 
