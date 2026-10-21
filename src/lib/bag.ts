@@ -2,6 +2,7 @@
 // Stock is read straight from the products table, never through the cached catalogue reads.
 import { and, asc, eq, gt, gte, inArray, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { lt, notExists } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { bagItems, products, type ProductImage } from "@/db/schema";
 
@@ -190,4 +191,23 @@ export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string):
           ),
           updated_at = now()
   `);
+}
+
+/**
+ * Deletes Guests whose Bag has not changed since `olderThan`; their Bag items go with them (cascade).
+ * A Bag's last change is its latest Bag item update; a Guest with an empty Bag falls back to the Guest's
+ * own `updatedAt` (set when the first "Add to bag" created them). Users are never deleted.
+ * One statement, so a Bag changed while it runs is either seen as recent or not, never half-deleted.
+ */
+export async function deleteStaleGuests(db: Db, olderThan: Date): Promise<number> {
+  const { user } = schema;
+  const recentBagItem = db
+    .select({ one: sql`1` })
+    .from(bagItems)
+    .where(and(eq(bagItems.userId, user.id), gte(bagItems.updatedAt, olderThan)));
+  const deleted = await db
+    .delete(user)
+    .where(and(eq(user.isAnonymous, true), lt(user.updatedAt, olderThan), notExists(recentBagItem)))
+    .returning({ id: user.id });
+  return deleted.length;
 }

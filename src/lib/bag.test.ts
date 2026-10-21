@@ -1,3 +1,5 @@
+import { deleteStaleGuests } from "./bag";
+import { bagItems } from "@/db/schema";
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { categories, products, user } from "@/db/schema";
@@ -370,5 +372,68 @@ describe("mergeBags", () => {
     await mergeBags(db, owner, owner);
 
     expect((await getBag(db, owner)).items).toEqual([expect.objectContaining({ slug, quantity: 2 })]);
+  });
+});
+
+describe("deleteStaleGuests", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const daysAgo = (days: number) => new Date(Date.now() - days * DAY);
+  const thirtyDaysAgo = () => daysAgo(30);
+
+  // Setup only: move a user's last changes into the past, as if time had passed.
+  async function lastChanged(owner: string, { user: userDaysAgo, bag: bagDaysAgo }: { user: number; bag?: number }) {
+    await db
+      .update(user)
+      .set({ createdAt: daysAgo(userDaysAgo), updatedAt: daysAgo(userDaysAgo) })
+      .where(eq(user.id, owner));
+    await db
+      .update(bagItems)
+      .set({ createdAt: daysAgo(bagDaysAgo ?? userDaysAgo), updatedAt: daysAgo(bagDaysAgo ?? userDaysAgo) })
+      .where(eq(bagItems.userId, owner));
+  }
+
+  it("deletes a Guest whose Bag has not changed since the cut-off, Bag items included", async () => {
+    const guest = await aGuest();
+    await addToBag(db, guest, await aProduct());
+    await lastChanged(guest, { user: 31 });
+
+    expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(1);
+
+    expect(await getBag(db, guest)).toMatchObject({ items: [], units: 0 });
+  });
+
+  it("keeps a Guest who changed their Bag after the cut-off, however old the Guest is", async () => {
+    const guest = await aGuest();
+    const slug = await aProduct();
+    await addToBag(db, guest, slug);
+    await lastChanged(guest, { user: 60, bag: 2 });
+
+    expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(0);
+
+    expect(await getBag(db, guest)).toMatchObject({ items: [expect.objectContaining({ slug, quantity: 1 })] });
+  });
+
+  it("never deletes a User, however long their Bag has not changed", async () => {
+    const owner = await aUser();
+    const slug = await aProduct();
+    await addToBag(db, owner, slug);
+    await lastChanged(owner, { user: 400 });
+
+    expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(0);
+
+    expect(await getBag(db, owner)).toMatchObject({ items: [expect.objectContaining({ slug, quantity: 1 })] });
+  });
+
+  it("judges a Guest with an empty Bag by when the Guest last changed", async () => {
+    const stale = await aGuest();
+    const recent = await aGuest();
+    await lastChanged(stale, { user: 31 });
+    await lastChanged(recent, { user: 29 });
+
+    expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(1);
+
+    // The recent Guest still exists: their Bag can still take a product.
+    const slug = await aProduct();
+    expect(await addToBag(db, recent, slug)).toEqual({ status: "added", quantity: 1 });
   });
 });
