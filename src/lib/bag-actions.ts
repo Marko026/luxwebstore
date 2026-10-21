@@ -45,7 +45,7 @@ async function changeSignedInBag<Result>(
   return withBag(ownerId, await change(ownerId));
 }
 
-// New Guests per client IP (ADR 0002). Generous for shoppers sharing one IP, small next to scripted sign-ins.
+// New Guests per client IP (ADR 0002). Generous for several Guests sharing one IP, small next to scripted sign-ins.
 const newGuestsPerClient = { max: 10, windowSeconds: 60 * 60 };
 
 /** Signs a new Guest in anonymously (the session cookie is set on this response); null when the client is over the limit. */

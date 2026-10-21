@@ -8,8 +8,8 @@ export type RateLimit = { max: number; windowSeconds: number };
 
 /**
  * Counts one request for `key` and says whether it is within `limit`. A refused request is counted too, but never
- * extends the window. The count is one statement (no interactive transactions on neon-http), so concurrent requests
- * cannot both take the last place. Time is the database's, the same for every server instance.
+ * extends the window. The count is one atomic upsert, so concurrent requests cannot both take the last place; a
+ * transaction would add nothing. Time is the database's, the same for every server instance.
  */
 export async function consumeRateLimit(db: Db, key: string, limit: RateLimit): Promise<boolean> {
   const expired = sql`${rateLimits.expiresAt} <= now()`;
