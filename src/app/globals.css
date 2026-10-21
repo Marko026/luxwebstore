@@ -88,6 +88,14 @@
   --spacing-gutter: var(--gutter);
 }
 
+/* Small bold label: header links and actions, drawer titles. */
+@utility ui-label {
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
 /* Text link: the underline slides out to the right while a new one enters from the left. */
 @utility link-wipe {
   position: relative;

@@ -1,10 +1,8 @@
-import { deleteStaleGuests } from "./bag";
-import { bagItems } from "@/db/schema";
-import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { categories, products, user } from "@/db/schema";
+import { beforeAll, describe, expect, it } from "vitest";
+import { bagItems, categories, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
-import { addToBag, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
+import { addToBag, deleteStaleGuests, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
@@ -218,8 +216,8 @@ describe("getBag", () => {
 
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual([
-      expect.objectContaining({ slug: tote, availability: "available" }),
-      expect.objectContaining({ slug: clutch, quantity: 1, availability: "sold-out" }),
+      expect.objectContaining({ slug: tote, stockStatus: "in-stock" }),
+      expect.objectContaining({ slug: clutch, quantity: 1, stockStatus: "sold-out" }),
     ]);
     expect(bag.subtotalCents).toBe(120_000);
   });
@@ -232,7 +230,39 @@ describe("getBag", () => {
     await setStock(slug, 2);
 
     const bag = await getBag(db, owner);
-    expect(bag.items).toEqual([expect.objectContaining({ slug, quantity: 4, stock: 2, availability: "short" })]);
+    expect(bag.items).toEqual([expect.objectContaining({ slug, quantity: 4, stock: 2, stockStatus: "short" })]);
+  });
+
+  it("offers one more and one less unit, within 1 and the Stock", async () => {
+    const owner = await aUser();
+    const single = await aProduct({ stock: 5 });
+    const middle = await aProduct({ stock: 5 });
+    const atStock = await aProduct({ stock: 2 });
+    await addToBag(db, owner, single);
+    for (let i = 0; i < 3; i++) await addToBag(db, owner, middle);
+    for (let i = 0; i < 2; i++) await addToBag(db, owner, atStock);
+
+    expect((await getBag(db, owner)).items).toEqual([
+      expect.objectContaining({ slug: single, quantity: 1, oneLess: null, oneMore: 2 }),
+      expect.objectContaining({ slug: middle, quantity: 3, oneLess: 2, oneMore: 4 }),
+      expect.objectContaining({ slug: atStock, quantity: 2, oneLess: 1, oneMore: null }),
+    ]);
+  });
+
+  it("lowers a short Bag item straight to the Stock, and a sold-out one not at all", async () => {
+    const owner = await aUser();
+    const short = await aProduct({ stock: 5 });
+    const soldOut = await aProduct({ stock: 5 });
+    for (let i = 0; i < 4; i++) await addToBag(db, owner, short);
+    for (let i = 0; i < 3; i++) await addToBag(db, owner, soldOut);
+
+    await setStock(short, 2);
+    await setStock(soldOut, 0);
+
+    expect((await getBag(db, owner)).items).toEqual([
+      expect.objectContaining({ slug: short, quantity: 4, oneLess: 2, oneMore: null }),
+      expect.objectContaining({ slug: soldOut, quantity: 3, oneLess: null, oneMore: null }),
+    ]);
   });
 
   it("drops a Bag item when its product is removed from the catalogue", async () => {
@@ -312,8 +342,8 @@ describe("mergeBags", () => {
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ slug: inBoth, quantity: 3, availability: "available" }),
-        expect.objectContaining({ slug: guestOnly, quantity: 2, availability: "available" }),
+        expect.objectContaining({ slug: inBoth, quantity: 3, stockStatus: "in-stock" }),
+        expect.objectContaining({ slug: guestOnly, quantity: 2, stockStatus: "in-stock" }),
       ]),
     );
     expect(bag.items).toHaveLength(2);
@@ -355,8 +385,8 @@ describe("mergeBags", () => {
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ slug: guestOnly, quantity: 1, availability: "sold-out" }),
-        expect.objectContaining({ slug: inBoth, quantity: 1, availability: "sold-out" }),
+        expect.objectContaining({ slug: guestOnly, quantity: 1, stockStatus: "sold-out" }),
+        expect.objectContaining({ slug: inBoth, quantity: 1, stockStatus: "sold-out" }),
       ]),
     );
     expect(bag.items).toHaveLength(2);
@@ -411,6 +441,19 @@ describe("deleteStaleGuests", () => {
     expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(0);
 
     expect(await getBag(db, guest)).toMatchObject({ items: [expect.objectContaining({ slug, quantity: 1 })] });
+  });
+
+  it("keeps a Guest who emptied their Bag after the cut-off: removing is a change too", async () => {
+    const guest = await aGuest();
+    const slug = await aProduct();
+    await addToBag(db, guest, slug);
+    await lastChanged(guest, { user: 60 });
+
+    await removeFromBag(db, guest, slug);
+
+    expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(0);
+    // The Guest still exists: their Bag can still take a product.
+    expect(await addToBag(db, guest, slug)).toEqual({ status: "added", quantity: 1 });
   });
 
   it("never deletes a User, however long their Bag has not changed", async () => {

@@ -3,13 +3,13 @@
 import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
 import { authClient } from "@/lib/auth-client";
 import type { Bag } from "@/lib/bag";
-import { getBagAction } from "@/lib/bag-actions";
+import { getBagAction, type OwnedBag } from "@/lib/bag-actions";
 
 type BagContextValue = {
   /** The Bag of whoever has a session, Guest or User; empty before a Guest's first "Add to bag". */
   bag: Bag;
   /** Shows a Bag a server function just returned. */
-  setBag: (bag: Bag) => void;
+  setBag: (owned: OwnedBag) => void;
   /** Whether the Bag drawer is open. */
   open: boolean;
   /** Opens the Bag drawer and reloads the Bag, so its prices and Stock flags are current. */
@@ -30,19 +30,22 @@ const BagContext = createContext<BagContextValue | null>(null);
 export function BagProvider({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
-  const [state, setState] = useState<{ ownerId: string; bag: Bag } | null>(null);
+  // `beforeSession`: written by a Guest's first "Add to bag", which signed them in on the server before the client
+  // knows their session. Shown until that session arrives; it then belongs to the user it names.
+  const [shownBag, setShownBag] = useState<(OwnedBag & { beforeSession: boolean }) | null>(null);
   const [open, setOpen] = useState(false);
-  // Counts local writes, so a load that started before a write can't overwrite the newer Bag when it lands later
-  const writes = useRef(0);
-  // The signed-in user now; a write or load that resolves after the user changed belongs to the old one and is ignored
+  // Bumped by every load, every local write and every change of user. A load is applied only if nothing bumped it
+  // while it was in flight, so it never overwrites a newer load, a newer write or the next user's Bag.
+  const version = useRef(0);
+  // The signed-in user now; a write that resolves after the user changed belongs to the old one and is ignored
   const currentUserId = useRef(userId);
 
   // On failure the Bag keeps what it showed; it reloads when the user changes, the drawer opens or after the next write
   const load = (ownerId: string) => {
-    const writesAtStart = writes.current;
+    const loadVersion = ++version.current;
     getBagAction()
       .then((bag) => {
-        if (currentUserId.current === ownerId && writes.current === writesAtStart) setState({ ownerId, bag });
+        if (version.current === loadVersion) setShownBag({ ownerId, bag, beforeSession: false });
       })
       .catch((error) => console.error("Could not load the Bag", error));
   };
@@ -50,12 +53,16 @@ export function BagProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     currentUserId.current = userId;
     if (userId) load(userId);
+    return () => {
+      version.current += 1;
+    };
   }, [userId]);
 
-  const setBag = (bag: Bag) => {
-    if (!userId || userId !== currentUserId.current) return;
-    writes.current += 1;
-    setState({ ownerId: userId, bag });
+  const setBag = ({ ownerId, bag }: OwnedBag) => {
+    // Started for a user who is no longer the signed-in one, or (server and client disagreeing) for someone else
+    if (userId !== currentUserId.current || (userId && ownerId !== userId)) return;
+    version.current += 1;
+    setShownBag({ ownerId, bag, beforeSession: !userId });
   };
 
   const openBag = () => {
@@ -63,7 +70,8 @@ export function BagProvider({ children }: { children: ReactNode }) {
     if (userId) load(userId);
   };
 
-  const bag = userId && state?.ownerId === userId ? state.bag : noBag;
+  const shown = shownBag && (userId ? shownBag.ownerId === userId : shownBag.beforeSession);
+  const bag = shown ? shownBag.bag : noBag;
   return (
     <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false) }}>{children}</BagContext>
   );

@@ -1,8 +1,7 @@
 // The Bag: all Bag rules live here. Every function takes the database as a parameter, so tests pass their own.
 // Stock is read straight from the products table, never through the cached catalogue reads.
-import { and, asc, eq, gt, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lt, notExists, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { lt, notExists } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { bagItems, products, type ProductImage } from "@/db/schema";
 
@@ -17,15 +16,25 @@ export type BagItem = {
   priceCents: number;
   stock: number;
   quantity: number;
-  availability: Availability;
+  stockStatus: StockStatus;
+  /** The quantity "one less" sets: straight down to the Stock for a short Bag item; null at 1 or when sold out. */
+  oneLess: number | null;
+  /** The quantity "one more" sets; null once the quantity reaches the Stock. */
+  oneMore: number | null;
 };
 
 /** "short": more units in the Bag than are in Stock ("Only N left"). "sold-out": Stock is 0. */
-export type Availability = "available" | "short" | "sold-out";
+export type StockStatus = "in-stock" | "short" | "sold-out";
 
-function availabilityOf(quantity: number, stock: number): Availability {
+function stockStatusOf(quantity: number, stock: number): StockStatus {
   if (stock <= 0) return "sold-out";
-  return quantity > stock ? "short" : "available";
+  return quantity > stock ? "short" : "in-stock";
+}
+
+// The same 1-to-Stock range `setQuantity` accepts, so the drawer only offers quantities that will be taken
+function quantityStepsOf(quantity: number, stock: number) {
+  const lower = Math.min(quantity - 1, stock);
+  return { oneLess: lower >= 1 ? lower : null, oneMore: quantity < stock ? quantity + 1 : null };
 }
 
 export type Bag = {
@@ -68,16 +77,7 @@ export async function setQuantity(
     .update(bagItems)
     .set({ quantity, updatedAt: sql`now()` })
     .where(
-      and(
-        eq(bagItems.userId, ownerId),
-        inArray(
-          bagItems.productId,
-          db
-            .select({ id: products.id })
-            .from(products)
-            .where(and(eq(products.slug, productSlug), gte(products.stock, quantity))),
-        ),
-      ),
+      and(eq(bagItems.userId, ownerId), inArray(bagItems.productId, productIdBySlug(db, productSlug, quantity))),
     )
     .returning({ quantity: bagItems.quantity });
   if (row) return { status: "updated", quantity: row.quantity };
@@ -94,13 +94,24 @@ export async function setQuantity(
 
 /** Takes the Bag item out of the Bag, whatever its quantity. Nothing happens if it isn't there. */
 export async function removeFromBag(db: Db, ownerId: string, productSlug: string): Promise<void> {
-  await db
-    .delete(bagItems)
-    .where(and(eq(bagItems.userId, ownerId), inArray(bagItems.productId, productIdBySlug(db, productSlug))));
+  // A removal leaves no Bag item to date it, so it marks the owner as changed instead (`deleteStaleGuests` reads
+  // that). One statement: the update runs only if the delete took something out.
+  await db.execute(sql`
+    with removed as (
+      delete from ${bagItems}
+      where user_id = ${ownerId} and product_id in (${productIdBySlug(db, productSlug)})
+      returning user_id
+    )
+    update ${schema.user} set updated_at = now() where id in (select user_id from removed)
+  `);
 }
 
-function productIdBySlug(db: Db, productSlug: string) {
-  return db.select({ id: products.id }).from(products).where(eq(products.slug, productSlug));
+/** The product's id, as a subquery; with `minStock`, only while its Stock is at least that. */
+function productIdBySlug(db: Db, productSlug: string, minStock?: number) {
+  return db
+    .select({ id: products.id })
+    .from(products)
+    .where(and(eq(products.slug, productSlug), minStock === undefined ? undefined : gte(products.stock, minStock)));
 }
 
 export async function getBag(db: Db, ownerId: string): Promise<Bag> {
@@ -121,14 +132,15 @@ export async function getBag(db: Db, ownerId: string): Promise<Bag> {
   const items = rows.map(({ images, ...row }) => ({
     ...row,
     packshot: images[0],
-    availability: availabilityOf(row.quantity, row.stock),
+    stockStatus: stockStatusOf(row.quantity, row.stock),
+    ...quantityStepsOf(row.quantity, row.stock),
   }));
   return {
     items,
     units: items.reduce((sum, item) => sum + item.quantity, 0),
-    // A short Bag item still counts at its quantity: it is flagged, and the shopper lowers it themselves
+    // A short Bag item still counts at its quantity: it is flagged, and the Guest or User lowers it themselves
     subtotalCents: items
-      .filter((item) => item.availability !== "sold-out")
+      .filter((item) => item.stockStatus !== "sold-out")
       .reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
   };
 }
@@ -173,6 +185,9 @@ export async function addToBag(db: Db, ownerId: string, productSlug: string): Pr
 export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string): Promise<void> {
   // Merging a Bag into itself changes nothing (and would delete and upsert the same rows in one statement)
   if (fromOwnerId === toOwnerId) return;
+  // The cap on a merged quantity: the Stock, but at least 1. Deliberate (spec story 16): a sold-out Bag item stays in
+  // the Bag, flagged "Sold out", instead of disappearing without the Guest or User knowing.
+  const cap = sql`greatest(${products.stock}, 1)`;
   // One statement (no interactive transactions on neon-http): the delete hands its rows to the insert
   await db.execute(sql`
     with moved as (
@@ -180,14 +195,14 @@ export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string):
       returning product_id, quantity, created_at
     )
     insert into ${bagItems} (user_id, product_id, quantity, created_at, updated_at)
-    select ${toOwnerId}, moved.product_id, least(moved.quantity, greatest(${products}.stock, 1)), moved.created_at, now()
+    select ${toOwnerId}, moved.product_id, least(moved.quantity, ${cap}), moved.created_at, now()
     from moved
     join ${products} on ${products}.id = moved.product_id
     -- The same product in both Bags: the larger quantity, not the sum, with the same cap
     on conflict (user_id, product_id) do update
       set quantity = least(
             greatest(${bagItems}.quantity, excluded.quantity),
-            (select greatest(stock, 1) from ${products} where ${products}.id = ${bagItems}.product_id)
+            (select ${cap} from ${products} where ${products}.id = ${bagItems}.product_id)
           ),
           updated_at = now()
   `);
@@ -195,8 +210,8 @@ export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string):
 
 /**
  * Deletes Guests whose Bag has not changed since `olderThan`; their Bag items go with them (cascade).
- * A Bag's last change is its latest Bag item update; a Guest with an empty Bag falls back to the Guest's
- * own `updatedAt` (set when the first "Add to bag" created them). Users are never deleted.
+ * A Bag's last change is the later of its latest Bag item update and the Guest's own `updatedAt` (set when the first
+ * "Add to bag" created them, and by every `removeFromBag`). Users are never deleted.
  * One statement, so a Bag changed while it runs is either seen as recent or not, never half-deleted.
  */
 export async function deleteStaleGuests(db: Db, olderThan: Date): Promise<number> {
