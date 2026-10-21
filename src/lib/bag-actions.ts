@@ -5,24 +5,71 @@
 import { headers } from "next/headers";
 import { db } from "@/db";
 import { auth } from "@/lib/auth";
-import { addToBag, emptyBag, getBag, type AddToBagResult, type Bag } from "@/lib/bag";
+import {
+  addToBag,
+  emptyBag,
+  getBag,
+  removeFromBag,
+  setQuantity,
+  type AddToBagResult,
+  type Bag,
+  type SetQuantityResult,
+} from "@/lib/bag";
+
+/** A Bag as it is now and whose it is, so the client can tell whether it still belongs to who is signed in. */
+export type OwnedBag = { ownerId: string; bag: Bag };
+
+/** A change asked for with no session (it expired, or the Guest never had one): nothing changed. */
+export type SignedOut = { status: "signed-out" };
 
 async function currentUserId() {
   const session = await auth.api.getSession({ headers: await headers() });
   return session?.user.id;
 }
 
-/** Adds one unit for the signed-in User and returns the new unit count. Guests get "signed-out" until Guest Bags exist. */
-export async function addToBagAction(
-  productSlug: string,
-): Promise<(AddToBagResult & { units: number }) | { status: "signed-out" }> {
-  const userId = await currentUserId();
-  if (!userId) return { status: "signed-out" };
-  const result = await addToBag(db, userId, String(productSlug));
-  return { ...result, units: (await getBag(db, userId)).units };
+/** The result of one Bag change, with the owner's Bag as it is after it. */
+async function withBag<Result>(ownerId: string, result: Result): Promise<Result & OwnedBag> {
+  return { ...result, ownerId, bag: await getBag(db, ownerId) };
 }
 
-/** The signed-in User's Bag; a Guest's is empty. */
+/** Runs one Bag change for whoever is signed in, Guest or User. */
+async function changeSignedInBag<Result>(
+  change: (ownerId: string) => Promise<Result>,
+): Promise<(Result & OwnedBag) | SignedOut> {
+  const ownerId = await currentUserId();
+  if (!ownerId) return { status: "signed-out" };
+  return withBag(ownerId, await change(ownerId));
+}
+
+/**
+ * Adds one unit and returns the Bag as it is now. Someone with no session is a Guest adding for the first time: they
+ * are signed in anonymously here (the session cookie is set on this response), never earlier (ADR 0001).
+ */
+export async function addToBagAction(productSlug: string): Promise<AddToBagResult & OwnedBag> {
+  const ownerId =
+    (await currentUserId()) ?? (await auth.api.signInAnonymous({ headers: await headers() })).user.id;
+  return withBag(ownerId, await addToBag(db, ownerId, String(productSlug)));
+}
+
+/** Sets a Bag item's quantity and returns the Bag as it is now, changed or not. */
+export async function setQuantityAction(
+  productSlug: string,
+  quantity: number,
+): Promise<(SetQuantityResult & OwnedBag) | SignedOut> {
+  return changeSignedInBag((ownerId) => setQuantity(db, ownerId, String(productSlug), Number(quantity)));
+}
+
+/** Takes a Bag item out and returns the Bag as it is now. */
+export async function removeFromBagAction(
+  productSlug: string,
+): Promise<({ status: "removed" } & OwnedBag) | SignedOut> {
+  return changeSignedInBag(async (ownerId) => {
+    await removeFromBag(db, ownerId, String(productSlug));
+    return { status: "removed" as const };
+  });
+}
+
+/** The Bag of whoever is signed in, Guest or User; empty when there is no session yet. */
 export async function getBagAction(): Promise<Bag> {
   const userId = await currentUserId();
   if (!userId) return emptyBag;

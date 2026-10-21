@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { AuthModal } from "@/components/auth/auth-modal";
 import { useBag } from "@/components/bag/bag-provider";
 import { authClient } from "@/lib/auth-client";
 import { addToBagAction } from "@/lib/bag-actions";
@@ -23,21 +22,18 @@ function messageFor(result: AddResult) {
 
 /**
  * "Add to bag" on the product page. Stock is checked live on the server, so the page's (cached) stock label can be
- * out of date: the result shows under the button and is announced. A Guest is asked to sign in for now.
+ * out of date: the result shows under the button and is announced. A Guest with no session yet is signed in
+ * anonymously by the first add (ADR 0001), so the client session is refetched afterwards.
  */
 export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boolean }) {
-  const { data: session, isPending: sessionPending } = authClient.useSession();
-  const { setUnits } = useBag();
+  const { data: session, refetch: refetchSession } = authClient.useSession();
+  const { setBag, openBag } = useBag();
   const [message, setMessage] = useState("");
-  const [authOpen, setAuthOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const add = () => {
     if (pending) return;
-    if (!sessionPending && !session) {
-      setAuthOpen(true);
-      return;
-    }
+    const hadSession = !!session;
     // Cleared first, so the same message twice in a row is announced again
     setMessage("");
     startTransition(async () => {
@@ -48,12 +44,13 @@ export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boole
         setMessage("Something went wrong. Please try again.");
         return;
       }
-      if (result.status === "signed-out") {
-        setAuthOpen(true);
-        return;
-      }
-      setUnits(result.units);
+      // Shown at once, even for a Guest the client doesn't know is signed in yet: the result names the Bag's owner
+      setBag(result);
       setMessage(messageFor(result));
+      // Only a unit that went in opens the drawer; "Only N available" and "Just sold out" stay on the page
+      if (result.status === "added") openBag();
+      // A first add signed a Guest in on the server; once the client knows that session, the Bag loads for it
+      if (!hadSession) refetchSession().catch((error) => console.error("Could not refresh the session", error));
     });
   };
 
@@ -71,7 +68,6 @@ export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boole
       <p aria-live="polite" className="mt-3 text-xs empty:mt-0">
         {message}
       </p>
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </>
   );
 }
