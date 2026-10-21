@@ -42,12 +42,12 @@ _Avoid_: Payment session, pending order
 
 **Order**:
 What a Customer has bought and paid for. An Order exists only once its Checkout is paid; until then there is no Order. It keeps its own email and delivery address, so it outlives a Guest who is deleted.
-_Avoid_: Purchase, sale, transaction
+_Avoid_: Purchase, sale
 
 **Order number**:
 The short number a Customer uses to refer to their Order, such as LUX-10042.
-_Avoid_: Order ID, reference
+_Avoid_: Order ID
 
 **Order item**:
 One product in an Order, with how many were bought, the price each was bought at and the product's name at that time. Later catalogue changes do not touch it, and a product that has been ordered is never deleted.
-_Avoid_: Line item, order line
+_Avoid_: Order line
