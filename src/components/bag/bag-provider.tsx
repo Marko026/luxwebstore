@@ -32,17 +32,18 @@ export function BagProvider({ children }: { children: ReactNode }) {
   const userId = session?.user.id;
   const [state, setState] = useState<{ ownerId: string; bag: Bag } | null>(null);
   const [open, setOpen] = useState(false);
-  // Counts local writes, so a load that started before a write can't overwrite the newer Bag when it lands later
-  const writes = useRef(0);
-  // The signed-in user now; a write or load that resolves after the user changed belongs to the old one and is ignored
+  // Bumped by every load, every local write and every change of user. A load is applied only if nothing bumped it
+  // while it was in flight, so it never overwrites a newer load, a newer write or the next user's Bag.
+  const version = useRef(0);
+  // The signed-in user now; a write that resolves after the user changed belongs to the old one and is ignored
   const currentUserId = useRef(userId);
 
   // On failure the Bag keeps what it showed; it reloads when the user changes, the drawer opens or after the next write
   const load = (ownerId: string) => {
-    const writesAtStart = writes.current;
+    const loadVersion = ++version.current;
     getBagAction()
       .then((bag) => {
-        if (currentUserId.current === ownerId && writes.current === writesAtStart) setState({ ownerId, bag });
+        if (version.current === loadVersion) setState({ ownerId, bag });
       })
       .catch((error) => console.error("Could not load the Bag", error));
   };
@@ -50,11 +51,14 @@ export function BagProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     currentUserId.current = userId;
     if (userId) load(userId);
+    return () => {
+      version.current += 1;
+    };
   }, [userId]);
 
   const setBag = (bag: Bag) => {
     if (!userId || userId !== currentUserId.current) return;
-    writes.current += 1;
+    version.current += 1;
     setState({ ownerId: userId, bag });
   };
 
