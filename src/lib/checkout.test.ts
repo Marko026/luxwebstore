@@ -4,7 +4,7 @@ import { bagItems, categories, checkouts, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
 import { fakePayments } from "@/test/fake-payments";
 import { addToBag, deleteStaleGuests, getBag, setQuantity } from "./bag";
-import { closeCheckoutOf, expireCheckouts, startCheckout } from "./checkout";
+import { expireCheckouts, moveCheckouts, startCheckout } from "./checkout";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
@@ -242,30 +242,72 @@ describe("expireCheckouts", () => {
   });
 });
 
-describe("closeCheckoutOf", () => {
-  it("ends a Guest's open Checkout and returns its units, so signing in loses nothing", async () => {
+describe("moveCheckouts", () => {
+  const move = (guest: string, account: string) => moveCheckouts(db, stripe.payments, guest, account);
+  /** The anonymous user is deleted once their Bag and Checkouts have moved (ADR 0001). */
+  const deleteGuest = (guest: string) => db.delete(user).where(eq(user.id, guest));
+
+  it("hands a Guest's open Checkout to the account: its units stay held, and the account's next start ends it", async () => {
     const guest = await aGuest();
+    const account = await aUser();
     const slug = await aProduct({ stock: 2 });
     await inBag(guest, slug);
     await start(guest);
+    const guestSession = lastSession();
 
-    expect(await closeCheckoutOf(db, stripe.payments, guest)).toBe("closed");
+    await move(guest, account);
+    await deleteGuest(guest);
 
-    expect(lastSession().state).toBe("expired");
-    expect(await stockInBag(guest, slug)).toBe(2);
-    expect(await closeCheckoutOf(db, stripe.payments, guest)).toBe("none");
+    expect(guestSession.state).toBe("open");
+    await inBag(account, slug);
+    expect(await stockInBag(account, slug)).toBe(1);
+    await start(account);
+    // The moved Checkout was the account's: closed, its unit back, then held again by the new one
+    expect(guestSession.state).toBe("expired");
+    expect(await stockInBag(account, slug)).toBe(1);
   });
 
-  it("leaves a paid Checkout open, its units still held", async () => {
+  it("closes the older of two open Checkouts, keeping the newer one", async () => {
     const guest = await aGuest();
-    const slug = await aProduct({ stock: 2 });
-    await inBag(guest, slug);
+    const account = await aUser();
+    const accountSlug = await aProduct({ stock: 2 });
+    const guestSlug = await aProduct({ stock: 2 });
+    await inBag(account, accountSlug);
+    await start(account);
+    const olderSession = lastSession();
+    await inBag(guest, guestSlug);
     await start(guest);
-    stripe.markPaid(lastSession().id);
+    const newerSession = lastSession();
 
-    expect(await closeCheckoutOf(db, stripe.payments, guest)).toBe("already-paid");
+    await move(guest, account);
+    await deleteGuest(guest);
 
-    expect(await stockInBag(guest, slug)).toBe(1);
+    expect(olderSession.state).toBe("expired");
+    expect(newerSession.state).toBe("open");
+    expect(await stockInBag(account, accountSlug)).toBe(2);
+    await inBag(account, guestSlug);
+    expect(await stockInBag(account, guestSlug)).toBe(1);
+  });
+
+  it("keeps the older one when it was already paid, closing the newer one instead", async () => {
+    const guest = await aGuest();
+    const account = await aUser();
+    const accountSlug = await aProduct({ stock: 2 });
+    const guestSlug = await aProduct({ stock: 2 });
+    await inBag(account, accountSlug);
+    await start(account);
+    const olderSession = lastSession();
+    stripe.markPaid(olderSession.id);
+    await inBag(guest, guestSlug);
+    await start(guest);
+    const newerSession = lastSession();
+
+    await move(guest, account);
+
+    expect(olderSession.state).toBe("paid");
+    expect(newerSession.state).toBe("expired");
+    expect(await stockInBag(account, accountSlug)).toBe(1);
+    expect(await stockInBag(guest, guestSlug)).toBe(2);
   });
 });
 

@@ -139,7 +139,7 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
   let closed = 0;
   for (const checkout of expired) {
     try {
-      if ((await endSession(payments, checkout)) === "expired" && (await closeOpenCheckout(db, checkout))) closed++;
+      if ((await closeCheckout(db, payments, checkout)) === "closed") closed++;
     } catch (error) {
       // One unreachable session must not hold up the others, nor the Checkout whose start runs this sweep
       console.error(`Could not close Checkout ${checkout.id}`, error);
@@ -149,18 +149,27 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
 }
 
 /**
- * Closes the owner's open Checkout, if any, by the closing rule. For a Guest who signs in: the anonymous user is
- * deleted with their Checkouts, so its units must go back first (until #27 moves Checkouts to the account instead).
+ * Moves every Checkout of `fromOwnerId` (a Guest who just signed in or signed up), open, paid or closed, to
+ * `toOwnerId`, before the Guest is deleted with whatever is still theirs (ADR 0001). A payment in progress then
+ * completes as the User's, and its units stay held. If both have an open Checkout, the older one is closed by the
+ * closing rule; if it turns out paid, the newer one is closed instead, so the account keeps at most one open.
  */
-export async function closeCheckoutOf(
-  db: Db,
-  payments: Payments,
-  ownerId: string,
-): Promise<"closed" | "none" | "already-paid"> {
-  const checkout = await openCheckoutOf(db, ownerId);
-  if (!checkout) return "none";
+export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: string, toOwnerId: string) {
+  if (fromOwnerId === toOwnerId) return;
+  const [fromOpen, toOpen] = await Promise.all([openCheckoutOf(db, fromOwnerId), openCheckoutOf(db, toOwnerId)]);
+  if (fromOpen && toOpen) {
+    // Ids grow with time, so the smaller one started first
+    const [older, newer] = fromOpen.id < toOpen.id ? [fromOpen, toOpen] : [toOpen, fromOpen];
+    if ((await closeCheckout(db, payments, older)) === "already-paid") await closeCheckout(db, payments, newer);
+  }
+  // Fails on "one open Checkout per owner" if both are still open (both paid), rather than drop either
+  await db.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
+}
+
+/** The closing rule: ends the Checkout's session first, and returns its units only once it can no longer be paid. */
+async function closeCheckout(db: Db, payments: Payments, checkout: OpenCheckout) {
   if ((await endSession(payments, checkout)) === "already-paid") return "already-paid";
-  return (await closeOpenCheckout(db, checkout)) ? "closed" : "none";
+  return (await closeOpenCheckout(db, checkout)) ? "closed" : "not-open";
 }
 
 async function openCheckoutOf(db: Db, ownerId: string): Promise<OpenCheckout | undefined> {
