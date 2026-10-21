@@ -162,3 +162,32 @@ export async function addToBag(db: Db, ownerId: string, productSlug: string): Pr
   if (product.stock === 0) return { status: "sold-out" };
   return { status: "capped", available: product.stock };
 }
+
+/**
+ * Moves every Bag item of `fromOwnerId` (a Guest who just signed in or signed up) into the Bag of `toOwnerId`,
+ * leaving the first Bag empty. For a product in both Bags the result is the larger quantity, not the sum.
+ * Every merged quantity is capped at live Stock; a sold-out Bag item stays at 1 so `getBag` still shows it
+ * as "Sold out" instead of it silently disappearing.
+ */
+export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string): Promise<void> {
+  // Merging a Bag into itself changes nothing (and would delete and upsert the same rows in one statement)
+  if (fromOwnerId === toOwnerId) return;
+  // One statement (no interactive transactions on neon-http): the delete hands its rows to the insert
+  await db.execute(sql`
+    with moved as (
+      delete from ${bagItems} where user_id = ${fromOwnerId}
+      returning product_id, quantity, created_at
+    )
+    insert into ${bagItems} (user_id, product_id, quantity, created_at, updated_at)
+    select ${toOwnerId}, moved.product_id, least(moved.quantity, greatest(${products}.stock, 1)), moved.created_at, now()
+    from moved
+    join ${products} on ${products}.id = moved.product_id
+    -- The same product in both Bags: the larger quantity, not the sum, with the same cap
+    on conflict (user_id, product_id) do update
+      set quantity = least(
+            greatest(${bagItems}.quantity, excluded.quantity),
+            (select greatest(stock, 1) from ${products} where ${products}.id = ${bagItems}.product_id)
+          ),
+          updated_at = now()
+  `);
+}
