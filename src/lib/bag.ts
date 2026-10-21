@@ -1,8 +1,8 @@
 // The Bag: all Bag rules live here. Every function takes the database as a parameter, so tests pass their own.
 // Stock is read straight from the products table, never through the cached catalogue reads.
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { gte, lt, notExists } from "drizzle-orm";
+import { lt, notExists } from "drizzle-orm";
 import * as schema from "@/db/schema";
 import { bagItems, products, type ProductImage } from "@/db/schema";
 
@@ -17,13 +17,22 @@ export type BagItem = {
   priceCents: number;
   stock: number;
   quantity: number;
+  availability: Availability;
 };
+
+/** "short": more units in the Bag than are in Stock ("Only N left"). "sold-out": Stock is 0. */
+export type Availability = "available" | "short" | "sold-out";
+
+function availabilityOf(quantity: number, stock: number): Availability {
+  if (stock <= 0) return "sold-out";
+  return quantity > stock ? "short" : "available";
+}
 
 export type Bag = {
   items: BagItem[];
   /** Total number of units across all Bag items. */
   units: number;
-  /** Euro cents, VAT included. */
+  /** Euro cents, VAT included. Sold-out Bag items are left out. */
   subtotalCents: number;
 };
 
@@ -36,6 +45,63 @@ export type AddToBagResult =
   /** Stock is 0, though the page may still have shown it in stock: "Just sold out". */
   | { status: "sold-out" }
   | { status: "unknown-product" };
+
+export type SetQuantityResult =
+  | { status: "updated"; quantity: number }
+  /** More than the Stock was asked for; nothing changed: "Only N left". */
+  | { status: "above-stock"; available: number }
+  /** Not a whole number of at least 1. Taking a Bag item out is `removeFromBag`. */
+  | { status: "invalid-quantity" }
+  /** The product isn't in this Bag (or no longer in the catalogue). */
+  | { status: "not-in-bag" };
+
+/** Sets a Bag item's quantity to between 1 and the Stock. Anything else is rejected, never clamped. */
+export async function setQuantity(
+  db: Db,
+  ownerId: string,
+  productSlug: string,
+  quantity: number,
+): Promise<SetQuantityResult> {
+  if (!Number.isInteger(quantity) || quantity < 1) return { status: "invalid-quantity" };
+  // The Stock check is part of the update, so it holds even if Stock changes between two requests
+  const [row] = await db
+    .update(bagItems)
+    .set({ quantity, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(bagItems.userId, ownerId),
+        inArray(
+          bagItems.productId,
+          db
+            .select({ id: products.id })
+            .from(products)
+            .where(and(eq(products.slug, productSlug), gte(products.stock, quantity))),
+        ),
+      ),
+    )
+    .returning({ quantity: bagItems.quantity });
+  if (row) return { status: "updated", quantity: row.quantity };
+
+  // Nothing was written; read the Bag item's Stock only to say why
+  const [item] = await db
+    .select({ stock: products.stock })
+    .from(bagItems)
+    .innerJoin(products, eq(products.id, bagItems.productId))
+    .where(and(eq(bagItems.userId, ownerId), eq(products.slug, productSlug)));
+  if (!item) return { status: "not-in-bag" };
+  return { status: "above-stock", available: item.stock };
+}
+
+/** Takes the Bag item out of the Bag, whatever its quantity. Nothing happens if it isn't there. */
+export async function removeFromBag(db: Db, ownerId: string, productSlug: string): Promise<void> {
+  await db
+    .delete(bagItems)
+    .where(and(eq(bagItems.userId, ownerId), inArray(bagItems.productId, productIdBySlug(db, productSlug))));
+}
+
+function productIdBySlug(db: Db, productSlug: string) {
+  return db.select({ id: products.id }).from(products).where(eq(products.slug, productSlug));
+}
 
 export async function getBag(db: Db, ownerId: string): Promise<Bag> {
   const rows = await db
@@ -52,11 +118,18 @@ export async function getBag(db: Db, ownerId: string): Promise<Bag> {
     .where(eq(bagItems.userId, ownerId))
     .orderBy(asc(bagItems.createdAt), asc(products.id));
 
-  const items = rows.map(({ images, ...row }) => ({ ...row, packshot: images[0] }));
+  const items = rows.map(({ images, ...row }) => ({
+    ...row,
+    packshot: images[0],
+    availability: availabilityOf(row.quantity, row.stock),
+  }));
   return {
     items,
     units: items.reduce((sum, item) => sum + item.quantity, 0),
-    subtotalCents: items.reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
+    // A short Bag item still counts at its quantity: it is flagged, and the shopper lowers it themselves
+    subtotalCents: items
+      .filter((item) => item.availability !== "sold-out")
+      .reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
   };
 }
 

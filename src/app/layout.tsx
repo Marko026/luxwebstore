@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bodoni_Moda, Outfit } from "next/font/google";
 import Script from "next/script";
+import { BagDrawer } from "@/components/bag/bag-drawer";
 import { BagProvider } from "@/components/bag/bag-provider";
 import "./globals.css";
 
@@ -35,7 +36,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Script id="js-flag" strategy="beforeInteractive">
           {`document.documentElement.classList.add("js")`}
         </Script>
-        <BagProvider>{children}</BagProvider>
+        <BagProvider>
+          {children}
+          <BagDrawer />
+        </BagProvider>
       </body>
     </html>
   );
