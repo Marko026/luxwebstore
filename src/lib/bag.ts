@@ -214,7 +214,7 @@ export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string):
   // The cap on a merged quantity: the Stock, but at least 1. Deliberate (spec story 16): a sold-out Bag item stays in
   // the Bag, flagged "Sold out", instead of disappearing without the Guest or User knowing.
   const cap = sql`greatest(${products.stock}, 1)`;
-  // One statement (no interactive transactions on neon-http): the delete hands its rows to the insert
+  // One statement, so no transaction is needed: the delete hands its rows to the insert, all or nothing
   await db.execute(sql`
     with moved as (
       delete from ${bagItems} where user_id = ${fromOwnerId}

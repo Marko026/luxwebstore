@@ -24,7 +24,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - `docs/design-reference.md` — visual rules and deliberate departures (header, grid, buttons, drawer); read before UI or layout work
 
 ## Architecture notes
-- `src/db/index.ts` uses the `neon-http` Drizzle driver: no connection pool, no interactive transactions. Switch to `neon-serverless` if transactions are needed.
+- `src/db/index.ts` uses the `neon-serverless` Drizzle driver (a WebSocket `Pool`), so `db.transaction` runs interactive transactions (ADR 0003). Writes that fit in one statement (`mergeBags`, `consumeRateLimit`) stay one statement. `src/db/seed.ts` is a one-off script and keeps its own `neon-http` client (it uses `db.batch`).
 - `src/lib/auth.ts` wires Better Auth to Drizzle via `drizzleAdapter(db, { provider: "pg" })`; auth tables must exist in `src/db/schema.ts` (generate with `npx auth generate`) or auth fails at runtime.
 - Path alias: `@/*` → `src/*`.
 
