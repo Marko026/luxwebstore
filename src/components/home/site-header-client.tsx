@@ -65,7 +65,8 @@ export function SiteHeaderClient({
   const [level, setLevel] = useState<MenuItem | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const { data: session } = authClient.useSession();
-  const user = session?.user;
+  // A Guest's session belongs to an anonymous user (ADR 0001): they are still offered "Sign In", never "Sign out"
+  const user = session?.user.isAnonymous ? undefined : session?.user;
   const { units } = useBag();
 
   useEffect(() => {
