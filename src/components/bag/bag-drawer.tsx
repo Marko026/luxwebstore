@@ -8,11 +8,20 @@ import { Drawer } from "@/components/drawer";
 import { MinusIcon, PlusIcon } from "@/components/home/icons";
 import type { BagItem } from "@/lib/bag";
 import { removeFromBagAction, setQuantityAction, type OwnedBag, type SignedOut } from "@/lib/bag-actions";
+import { startCheckoutAction, type CheckoutRefusal } from "@/lib/checkout-actions";
 import { formatPrice, productHref } from "@/lib/products";
 
 // A round 48px icon button (design reference §6), outlined with the hairline used around form fields (§7)
 const stepperButton =
   "grid size-12 place-items-center rounded-full border border-line transition-[border-color,scale] duration-(--t-press) hover:border-ink active:scale-95 disabled:pointer-events-none disabled:opacity-30";
+
+// Why pressing "Checkout" started nothing. Signed out meanwhile: the provider stops showing the Bag, so nothing to say.
+const checkoutRefusals: Record<CheckoutRefusal["status"] | SignedOut["status"], string> = {
+  "empty-bag": "Your bag is empty.",
+  "bag-not-ready": "An item in your bag sold out or ran short meanwhile.",
+  "earlier-checkout-paid": "Your earlier checkout has already been paid.",
+  "signed-out": "",
+};
 
 function noteFor(item: BagItem) {
   if (item.stockStatus === "sold-out") return "Sold out";
@@ -21,9 +30,10 @@ function noteFor(item: BagItem) {
 }
 
 /**
- * The Bag drawer: each Bag item with a − n + stepper and "Remove", the Subtotal, and a disabled Checkout. Opens from the
- * header bag icon and after a successful "Add to bag". A sold-out or short Bag item stays and is flagged; nothing is
- * changed without the Guest or User doing it. One change at a time: the controls wait while one is on its way.
+ * The Bag drawer: each Bag item with a − n + stepper and "Remove", the Subtotal, and "Checkout". Opens from the header
+ * bag icon and after a successful "Add to bag". A sold-out or short Bag item stays and is flagged, and blocks
+ * "Checkout"; nothing is changed without the Guest or User doing it. One change at a time: the controls wait while one
+ * is on its way.
  */
 export function BagDrawer() {
   const { bag, setBag, open, closeBag } = useBag();
@@ -47,6 +57,24 @@ export function BagDrawer() {
 
   const setQuantity = (slug: string, quantity: number) => runBagChange(() => setQuantityAction(slug, quantity));
   const remove = (slug: string) => runBagChange(() => removeFromBagAction(slug));
+
+  // Started: the server function redirects to Stripe's payment page and the controls wait until it opens.
+  // Otherwise it shows the Bag as it is now, with any sold-out or short Bag item flagged, and says why.
+  const checkout = () => {
+    if (pending) return;
+    setError("");
+    startTransition(async () => {
+      try {
+        const result = await startCheckoutAction();
+        if ("bag" in result) setBag(result);
+        setError(checkoutRefusals[result.status]);
+      } catch {
+        setError("Something went wrong. Please try again.");
+      }
+    });
+  };
+
+  const flagged = bag.items.some((item) => item.stockStatus !== "in-stock");
 
   return (
     <Drawer open={open} onClose={closeBag} id="bag" label="Bag" closeLabel="Close bag">
@@ -138,14 +166,15 @@ export function BagDrawer() {
               <p className="mt-1 text-xs text-muted">VAT included</p>
               <button
                 type="button"
-                disabled
-                aria-describedby="checkout-soon"
+                onClick={checkout}
+                disabled={pending || flagged}
+                aria-describedby="checkout-blocked"
                 className="btn btn-dark mt-6 h-12 w-full disabled:pointer-events-none disabled:opacity-40"
               >
                 Checkout
               </button>
-              <p id="checkout-soon" className="mt-3 text-center text-xs text-muted">
-                Checkout opens soon
+              <p id="checkout-blocked" aria-live="polite" className="mt-3 text-center text-xs text-muted empty:mt-0">
+                {flagged && "Lower or remove the marked items to check out."}
               </p>
             </div>
           </>

@@ -18,6 +18,7 @@ import {
   type NewGuestRefusal,
   type SetQuantityResult,
 } from "@/lib/bag";
+import { currentUserId } from "@/lib/current-user";
 import { consumeRateLimit } from "@/lib/rate-limit";
 
 /** A Bag as it is now and whose it is, so the client can tell whether it still belongs to who is signed in. */
@@ -25,11 +26,6 @@ export type OwnedBag = { ownerId: string; bag: Bag };
 
 /** A change asked for with no session (it expired, or the Guest never had one): nothing changed. */
 export type SignedOut = { status: "signed-out" };
-
-async function currentUserId() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  return session?.user.id;
-}
 
 /** The result of one Bag change, with the owner's Bag as it is after it. */
 async function withBag<Result>(ownerId: string, result: Result): Promise<Result & OwnedBag> {
