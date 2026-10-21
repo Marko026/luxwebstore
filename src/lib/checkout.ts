@@ -6,9 +6,14 @@ import { and, asc, eq, exists, gte, isNull, lte, sql, type SQL } from "drizzle-o
 import { bagItems, checkoutItems, checkouts, orderItems, orders, products, user, type ProductImage } from "@/db/schema";
 import { getBag, type Bag, type Db } from "@/lib/bag";
 import type { DeliveryAddress, Payments } from "@/lib/payments";
+import { consumeRateLimit, type RateLimit } from "@/lib/rate-limit";
 
 /** How long a Checkout can be paid: Stripe's shortest session lifetime. */
 const checkoutMinutes = 30;
+
+// Checkout starts per owner. Every start calls Stripe and moves Stock, so a script that keeps restarting would spend
+// our Stripe request quota and churn the few units; a Guest or User who goes back and forth stays well under it.
+const checkoutStartsPerOwner: RateLimit = { max: 10, windowSeconds: 60 * 60 };
 
 /** Where Stripe sends the Guest or User after paying, and back from its page. */
 export type CheckoutUrls = { successUrl: string; cancelUrl: string };
@@ -19,7 +24,9 @@ export type StartCheckoutResult =
   /** A Bag item sold out or ran short; no Checkout started. The Bag as it is now, with the item flagged. */
   | { status: "bag-not-ready"; bag: Bag }
   /** The owner's open Checkout turned out paid on Stripe, so it became an Order and no new one started. */
-  | { status: "earlier-checkout-paid" };
+  | { status: "earlier-checkout-paid" }
+  /** The owner tried to start too many Checkouts lately; this try was counted, nothing else changed. */
+  | { status: "too-many-starts" };
 
 type OpenCheckout = { id: number; stripeSessionId: string | null };
 
@@ -52,7 +59,8 @@ export type CompleteCheckoutResult =
 /**
  * Starts a Checkout for the owner's Bag: ends the owner's open Checkout, takes the Bag's units out of Stock, fixes
  * their prices and names, and creates the Stripe session. Only when every Bag item is in Stock at its full quantity.
- * If creating the session fails, the Checkout is closed again and the error is thrown.
+ * If creating the session fails, the Checkout is closed again and the error is thrown. Every attempt counts against
+ * the owner's limit, and one over it changes nothing: no Stock moves and Stripe is not called.
  */
 export async function startCheckout(
   db: Db,
@@ -60,6 +68,9 @@ export async function startCheckout(
   ownerId: string,
   urls: CheckoutUrls,
 ): Promise<StartCheckoutResult> {
+  if (!(await consumeRateLimit(db, `checkout-start:${ownerId}`, checkoutStartsPerOwner))) {
+    return { status: "too-many-starts" };
+  }
   await expireCheckouts(db, payments, new Date());
 
   // The earlier Checkout's page stops taking payment before its units go back. If it was paid first, it becomes an

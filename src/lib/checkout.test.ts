@@ -211,6 +211,58 @@ describe("startCheckout", () => {
   });
 });
 
+// 10 starts per owner per hour
+describe("startCheckout's limit", () => {
+  /** An owner with one unit in their Bag who has started a Checkout `times` times, each one closing the one before. */
+  async function anOwnerWhoStarted(times: number) {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    const results = [];
+    for (let i = 0; i < times; i++) results.push(await start(owner));
+    return { owner, slug, results };
+  }
+
+  it("lets an owner start up to 10 Checkouts", async () => {
+    const { results } = await anOwnerWhoStarted(10);
+
+    expect(results).toEqual(Array(10).fill(expect.objectContaining({ status: "started" })));
+  });
+
+  it("refuses the next start before anything is held or sent to the payment page", async () => {
+    const { owner, slug } = await anOwnerWhoStarted(10);
+    const held = lastSession();
+    // A start that went through would take this one's unit out of Stock
+    const added = await aProduct({ stock: 2 });
+    await inBag(owner, added);
+    const sessionsBefore = stripe.sessions.length;
+
+    expect(await start(owner)).toEqual({ status: "too-many-starts" });
+
+    expect(stripe.sessions).toHaveLength(sessionsBefore);
+    expect(await catalogueStock(added)).toBe(2);
+    // The open Checkout keeps its page and its unit
+    expect(held.state).toBe("open");
+    expect(await catalogueStock(slug)).toBe(1);
+  });
+
+  it("counts every start, also one that starts nothing", async () => {
+    const owner = await aUser();
+    for (let i = 0; i < 10; i++) expect(await start(owner)).toEqual({ status: "empty-bag" });
+    await inBag(owner, await aProduct());
+
+    expect(await start(owner)).toEqual({ status: "too-many-starts" });
+  });
+
+  it("counts each owner apart", async () => {
+    await anOwnerWhoStarted(11);
+    const other = await aGuest();
+    await inBag(other, await aProduct());
+
+    expect(await start(other)).toMatchObject({ status: "started" });
+  });
+});
+
 describe("the owner's own open Checkout", () => {
   it("leaves the units it holds available in the owner's Bag only: another Bag sees them gone", async () => {
     const owner = await aUser();
