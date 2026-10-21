@@ -25,8 +25,8 @@ export async function startCheckoutAction(): Promise<CheckoutStart | SignedOut> 
   const result = await startCheckout(db, stripePayments, ownerId, {
     // Stripe fills in the session id; the confirmation page makes and shows the Order
     successUrl: `${appUrl}/checkout/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-    // Stripe's back link; it releases the Checkout once that route exists (#26)
-    cancelUrl: `${appUrl}/`,
+    // Stripe's back link: the cancel route closes the Checkout and opens the Bag drawer at home
+    cancelUrl: `${appUrl}/checkout/cancel?session_id={CHECKOUT_SESSION_ID}`,
   });
   return { ...result, ownerId, bag: "bag" in result ? result.bag : await getBag(db, ownerId) };
 }
