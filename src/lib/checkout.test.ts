@@ -53,7 +53,7 @@ async function inBag(owner: string, slug: string, quantity = 1) {
   if (quantity > 1) await setQuantity(db, owner, slug, quantity);
 }
 
-/** Stock as the catalogue shows it, and every Bag but that of an owner whose open Checkout holds units of it. */
+/** Stock as the catalogue, and every Bag but the holder's, shows it. */
 async function catalogueStock(slug: string) {
   const [product] = await db.select({ stock: products.stock }).from(products).where(eq(products.slug, slug));
   return product?.stock;
@@ -239,6 +239,17 @@ describe("the owner's own open Checkout", () => {
 
     expect(await setQuantity(db, owner, slug, item!.oneLess!)).toEqual({ status: "updated", quantity: 1 });
     expect(await setQuantity(db, owner, slug, 3)).toEqual({ status: "above-stock", available: 2 });
+  });
+
+  it("lets the owner add the units it holds again, and no more", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    await start(owner);
+
+    expect(await addToBag(db, owner, slug)).toEqual({ status: "added", quantity: 2 });
+    expect(await addToBag(db, owner, slug)).toEqual({ status: "capped", available: 2 });
+    expect(await addToBag(db, await aUser(), slug)).toEqual({ status: "added", quantity: 1 });
   });
 
   it("does not block starting again on the last unit: the old one closes, and one hold is left", async () => {
@@ -614,7 +625,6 @@ describe("moveCheckouts", () => {
     expect(olderSession.state).toBe("expired");
     expect(newerSession.state).toBe("open");
     expect(await catalogueStock(accountSlug)).toBe(2);
-    await inBag(account, guestSlug);
     expect(await catalogueStock(guestSlug)).toBe(1);
   });
 

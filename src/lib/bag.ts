@@ -111,15 +111,15 @@ export async function removeFromBag(db: Db, ownerId: string, productSlug: string
   `);
 }
 
-/** The product's id, as a subquery; with `minStock`, only while the owner can take at least that many (`stockFor`). */
-function productIdBySlug(db: Db, productSlug: string, minStock?: { ownerId: string; quantity: number }) {
+/** The product's id, as a subquery; with `takeable`, only while the owner can take that many (`stockFor`). */
+function productIdBySlug(db: Db, productSlug: string, takeable?: { ownerId: string; quantity: number }) {
   return db
     .select({ id: products.id })
     .from(products)
     .where(
       and(
         eq(products.slug, productSlug),
-        minStock && gte(stockFor(db, minStock.ownerId), minStock.quantity),
+        takeable && gte(stockFor(db, takeable.ownerId), takeable.quantity),
       ),
     );
 }
@@ -183,25 +183,29 @@ export async function addToBag(db: Db, ownerId: string, productSlug: string): Pr
           updatedAt: sql<Date>`now()`.as("updated_at"),
         })
         .from(products)
-        .where(and(eq(products.slug, productSlug), gt(products.stock, 0))),
+        .where(and(eq(products.slug, productSlug), gt(stockFor(db, ownerId), 0))),
     )
     .onConflictDoUpdate({
       target: [bagItems.userId, bagItems.productId],
       set: { quantity: sql`${bagItems.quantity} + 1`, updatedAt: sql`now()` },
-      setWhere: sql`${bagItems.quantity} < (select ${products.stock} from ${products} where ${products.id} = ${bagItems.productId})`,
+      setWhere: sql`${bagItems.quantity} < (select ${stockFor(db, ownerId)} from ${products} where ${products.id} = ${bagItems.productId})`,
     })
     .returning({ quantity: bagItems.quantity });
   if (row) return { status: "added", quantity: row.quantity };
 
   // Nothing was written; read the Stock only to say why (no write depends on this read).
-  const stock = await stockOf(db, productSlug);
+  const stock = await stockOf(db, productSlug, ownerId);
   if (stock === undefined) return { status: "unknown-product" };
   if (stock === 0) return { status: "sold-out" };
   return { status: "capped", available: stock };
 }
 
-async function stockOf(db: Db, productSlug: string): Promise<number | undefined> {
-  const [product] = await db.select({ stock: products.stock }).from(products).where(eq(products.slug, productSlug));
+/** The product's Stock; with `ownerId`, as that owner can take it (`stockFor`). */
+async function stockOf(db: Db, productSlug: string, ownerId?: string): Promise<number | undefined> {
+  const [product] = await db
+    .select({ stock: ownerId ? stockFor(db, ownerId) : products.stock })
+    .from(products)
+    .where(eq(products.slug, productSlug));
   return product?.stock;
 }
 

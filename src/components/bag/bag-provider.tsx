@@ -29,7 +29,8 @@ const BagContext = createContext<BagContextValue | null>(null);
 let arrivedToOpenBag: boolean | undefined;
 const arrivedToOpenBagNow = () =>
   (arrivedToOpenBag ??= new URLSearchParams(window.location.search).get("bag") === "open");
-const neverChanges = () => () => {};
+// The address is read once, so there is nothing to subscribe to
+const noSubscription = () => () => {};
 
 /**
  * Shares the Bag and the Bag drawer's open state between the header, "Add to bag" and the drawer. Loads the Bag
@@ -43,9 +44,9 @@ export function BagProvider({ children }: { children: ReactNode }) {
   // knows their session. Shown until that session arrives; it then belongs to the user it names.
   const [shownBag, setShownBag] = useState<(OwnedBag & { beforeSession: boolean }) | null>(null);
   // Closed on the server and while hydrating; open from the first client render after arriving by Stripe's back link
-  const arrivedOpen = useSyncExternalStore(neverChanges, arrivedToOpenBagNow, () => false);
+  const arrivedOpen = useSyncExternalStore(noSubscription, arrivedToOpenBagNow, () => false);
   // Null until the drawer is first opened or closed here
-  const [openChoice, setOpen] = useState<boolean | null>(null);
+  const [openChoice, setOpenChoice] = useState<boolean | null>(null);
   const open = openChoice ?? arrivedOpen;
   // Bumped by every load, every local write and every change of user. A load is applied only if nothing bumped it
   // while it was in flight, so it never overwrites a newer load, a newer write or the next user's Bag.
@@ -88,7 +89,7 @@ export function BagProvider({ children }: { children: ReactNode }) {
   };
 
   const openBag = () => {
-    setOpen(true);
+    setOpenChoice(true);
     if (userId) load(userId);
   };
 
@@ -99,7 +100,7 @@ export function BagProvider({ children }: { children: ReactNode }) {
   const shown = shownBag && (userId ? shownBag.ownerId === userId : shownBag.beforeSession);
   const bag = shown ? shownBag.bag : noBag;
   return (
-    <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false), reloadBag }}>{children}</BagContext>
+    <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpenChoice(false), reloadBag }}>{children}</BagContext>
   );
 }
 
