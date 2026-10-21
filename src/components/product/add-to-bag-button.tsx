@@ -27,7 +27,7 @@ function messageFor(result: AddResult) {
  */
 export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boolean }) {
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const { setUnits } = useBag();
+  const { setBag, openBag } = useBag();
   const [message, setMessage] = useState("");
   const [authOpen, setAuthOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -52,8 +52,10 @@ export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boole
         setAuthOpen(true);
         return;
       }
-      setUnits(result.units);
+      setBag(result.bag);
       setMessage(messageFor(result));
+      // Only a unit that went in opens the drawer; "Only N available" and "Just sold out" stay on the page
+      if (result.status === "added") openBag();
     });
   };
 
