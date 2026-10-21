@@ -2,10 +2,10 @@
 // port as parameters, so tests pass their own; nothing here imports Stripe.
 // A Checkout is closed only after its Stripe session can no longer be paid, and closing puts its units back in Stock in
 // the same transaction that marks it closed.
-import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
-import { bagItems, checkoutItems, checkouts, products, user } from "@/db/schema";
+import { and, asc, eq, exists, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { bagItems, checkoutItems, checkouts, orderItems, orders, products, user, type ProductImage } from "@/db/schema";
 import { getBag, type Bag, type Db } from "@/lib/bag";
-import type { Payments } from "@/lib/payments";
+import type { DeliveryAddress, Payments } from "@/lib/payments";
 
 /** How long a Checkout can be paid: Stripe's shortest session lifetime. */
 const checkoutMinutes = 30;
@@ -18,10 +18,36 @@ export type StartCheckoutResult =
   | { status: "empty-bag" }
   /** A Bag item sold out or ran short; no Checkout started. The Bag as it is now, with the item flagged. */
   | { status: "bag-not-ready"; bag: Bag }
-  /** The owner's open Checkout turned out paid on Stripe, so it was left open and no new one started. */
+  /** The owner's open Checkout turned out paid on Stripe, so it became an Order and no new one started. */
   | { status: "earlier-checkout-paid" };
 
 type OpenCheckout = { id: number; stripeSessionId: string | null };
+
+export type OrderItem = {
+  productSlug: string;
+  /** The product's name as bought. */
+  productName: string;
+  packshot: ProductImage | undefined;
+  quantity: number;
+  /** Euro cents, VAT included, as bought. */
+  unitPriceCents: number;
+};
+
+export type Order = {
+  /** The Order number as the Customer sees it, such as "LUX-10042". */
+  number: string;
+  items: OrderItem[];
+  /** Euro cents, VAT included; delivery is free. */
+  totalCents: number;
+  email: string;
+  deliveryAddress: DeliveryAddress;
+};
+
+export type CompleteCheckoutResult =
+  | { status: "completed"; order: Order }
+  | { status: "not-paid" }
+  /** No Checkout has this session. */
+  | { status: "unknown-session" };
 
 /**
  * Starts a Checkout for the owner's Bag: ends the owner's open Checkout, takes the Bag's units out of Stock, fixes
@@ -36,9 +62,13 @@ export async function startCheckout(
 ): Promise<StartCheckoutResult> {
   await expireCheckouts(db, payments, new Date());
 
-  // The earlier Checkout's page stops taking payment before its units go back
+  // The earlier Checkout's page stops taking payment before its units go back. If it was paid first, it becomes an
+  // Order instead, which takes its units out of the Bag
   const earlier = await openCheckoutOf(db, ownerId);
-  if (earlier && (await endSession(payments, earlier)) === "already-paid") return { status: "earlier-checkout-paid" };
+  if (earlier?.stripeSessionId && (await endSession(payments, earlier)) === "already-paid") {
+    await completeCheckout(db, payments, earlier.stripeSessionId);
+    return { status: "earlier-checkout-paid" };
+  }
 
   const expiresAt = new Date(Date.now() + checkoutMinutes * 60_000);
   const held = await db.transaction(async (tx) => {
@@ -128,8 +158,8 @@ export async function startCheckout(
 }
 
 /**
- * Closes every open Checkout past its expiry and returns how many it closed. One that turns out paid is left open for
- * completion; one whose session cannot be reached is left for the next sweep.
+ * Closes every open Checkout past its expiry and returns how many it closed. One that turns out paid becomes an Order
+ * instead; one whose session cannot be reached is left for the next sweep.
  */
 export async function expireCheckouts(db: Db, payments: Payments, now: Date): Promise<number> {
   const expired = await db
@@ -139,7 +169,9 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
   let closed = 0;
   for (const checkout of expired) {
     try {
-      if ((await closeCheckout(db, payments, checkout)) === "closed") closed++;
+      const result = await closeCheckout(db, payments, checkout);
+      if (result === "closed") closed++;
+      if (result === "already-paid") await completeCheckout(db, payments, checkout.stripeSessionId!);
     } catch (error) {
       // One unreachable session must not hold up the others, nor the Checkout whose start runs this sweep
       console.error(`Could not close Checkout ${checkout.id}`, error);
@@ -152,12 +184,14 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
  * Moves every Checkout of `fromOwnerId` (a Guest who just signed in or signed up), open, paid or closed, to
  * `toOwnerId`, before the Guest is deleted with whatever is still theirs (ADR 0001). A payment in progress then
  * completes as the User's, and its units stay held. If both have an open Checkout, the older one is closed by the
- * closing rule. If it turns out paid, it is marked paid instead (its units stay out of Stock and completion still makes
- * its Order, #25) and the newer one stays open, so the account keeps at most one open and loses no payment in progress.
+ * closing rule. If it turns out paid, it is marked paid instead (its units stay out of Stock) and the newer one stays
+ * open, so the account keeps at most one open and loses no payment in progress. Once moved, the paid one becomes the
+ * account's Order, its units leaving the merged Bag.
  */
 export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: string, toOwnerId: string) {
   if (fromOwnerId === toOwnerId) return;
   const [fromOpen, toOpen] = await Promise.all([openCheckoutOf(db, fromOwnerId), openCheckoutOf(db, toOwnerId)]);
+  let paidSessionId: string | undefined;
   if (fromOpen && toOpen) {
     // Ids grow with time, so the smaller one started first
     const [older, newer] = fromOpen.id < toOpen.id ? [fromOpen, toOpen] : [toOpen, fromOpen];
@@ -166,9 +200,167 @@ export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: str
         .update(checkouts)
         .set({ state: "paid" })
         .where(and(eq(checkouts.id, older.id), eq(checkouts.state, "open")));
+      paidSessionId = older.stripeSessionId!;
     }
   }
   await db.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
+  if (paidSessionId) {
+    // Signing in must not fail over it: Stripe's webhook or the confirmation page completes it later
+    await completeCheckout(db, payments, paidSessionId).catch((error) =>
+      console.error(`Could not complete the Checkout of session ${paidSessionId}`, error),
+    );
+  }
+}
+
+/**
+ * Makes the paid Checkout of a Stripe session an Order, once: copies its items, prices and names from our Checkout
+ * (not from Stripe's line items) and its email and delivery address from Stripe, marks the Checkout paid and takes the
+ * bought units out of the owner's Bag (units added meanwhile stay). Called by Stripe's webhook and the confirmation
+ * page, whichever comes first; calling it again returns the same Order. Decides by whether the Checkout has an Order,
+ * not by its state: a Checkout can be marked paid before its Order exists (`moveCheckouts`).
+ */
+export async function completeCheckout(db: Db, payments: Payments, sessionId: string): Promise<CompleteCheckoutResult> {
+  const [checkout] = await db
+    .select({ id: checkouts.id })
+    .from(checkouts)
+    .where(eq(checkouts.stripeSessionId, sessionId));
+  if (!checkout) return { status: "unknown-session" };
+  const made = await findOrder(db, eq(orders.checkoutId, checkout.id));
+  if (made) return { status: "completed", order: made };
+
+  const session = await payments.readSession(sessionId);
+  if (!session.paid) return { status: "not-paid" };
+  const { email, deliveryAddress } = session;
+  if (!email || !deliveryAddress) throw new Error(`Paid session ${sessionId} has no email or delivery address`);
+
+  await db.transaction(async (tx) => {
+    // Locks the Checkout, so the webhook and the confirmation page arriving together make one Order
+    const [locked] = await tx
+      .select({ ownerId: checkouts.userId })
+      .from(checkouts)
+      .where(eq(checkouts.id, checkout.id))
+      .for("update");
+    if (!locked) throw new Error(`Checkout ${checkout.id} was deleted while it completed`);
+    const [existing] = await tx
+      .select({ number: orders.number })
+      .from(orders)
+      .where(eq(orders.checkoutId, checkout.id));
+    if (existing) return;
+
+    const items = await tx
+      .select({
+        productId: checkoutItems.productId,
+        quantity: checkoutItems.quantity,
+        unitPriceCents: checkoutItems.unitPriceCents,
+        productName: checkoutItems.productName,
+      })
+      .from(checkoutItems)
+      .where(eq(checkoutItems.checkoutId, checkout.id));
+    const [order] = await tx
+      .insert(orders)
+      .values({
+        checkoutId: checkout.id,
+        userId: locked.ownerId,
+        email,
+        deliveryName: deliveryAddress.name,
+        deliveryLine1: deliveryAddress.line1,
+        deliveryLine2: deliveryAddress.line2,
+        deliveryCity: deliveryAddress.city,
+        deliveryPostalCode: deliveryAddress.postalCode,
+        deliveryCountry: deliveryAddress.country,
+        totalCents: items.reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0),
+      })
+      .returning({ number: orders.number });
+    await tx.insert(orderItems).values(items.map((item) => ({ ...item, orderNumber: order!.number })));
+    // Its units are already out of Stock since it started
+    await tx.update(checkouts).set({ state: "paid" }).where(eq(checkouts.id, checkout.id));
+
+    // The bought units leave the Bag: a Bag item bought whole goes, one with units added meanwhile keeps those
+    const boughtWhole = tx
+      .select({ one: sql`1` })
+      .from(checkoutItems)
+      .where(
+        and(
+          eq(checkoutItems.checkoutId, checkout.id),
+          eq(checkoutItems.productId, bagItems.productId),
+          gte(checkoutItems.quantity, bagItems.quantity),
+        ),
+      );
+    await tx.delete(bagItems).where(and(eq(bagItems.userId, locked.ownerId), exists(boughtWhole)));
+    await tx
+      .update(bagItems)
+      .set({ quantity: sql`${bagItems.quantity} - ${checkoutItems.quantity}`, updatedAt: sql`now()` })
+      .from(checkoutItems)
+      .where(
+        and(
+          eq(bagItems.userId, locked.ownerId),
+          eq(checkoutItems.checkoutId, checkout.id),
+          eq(checkoutItems.productId, bagItems.productId),
+        ),
+      );
+  });
+
+  const order = await findOrder(db, eq(orders.checkoutId, checkout.id));
+  if (!order) throw new Error(`Checkout ${checkout.id} has no Order after completing`);
+  return { status: "completed", order };
+}
+
+/**
+ * Closes the Checkout of a Stripe session that expired (Stripe's expiry event), returning its units; one that turns
+ * out paid becomes an Order instead. Nothing happens for a Checkout no longer open.
+ */
+export async function expireCheckout(db: Db, payments: Payments, sessionId: string): Promise<void> {
+  const [checkout] = await db
+    .select({ id: checkouts.id, stripeSessionId: checkouts.stripeSessionId })
+    .from(checkouts)
+    .where(and(eq(checkouts.stripeSessionId, sessionId), eq(checkouts.state, "open")));
+  if (checkout && (await closeCheckout(db, payments, checkout)) === "already-paid") {
+    await completeCheckout(db, payments, sessionId);
+  }
+}
+
+/** The Order of the Checkout with this Stripe session, only if it belongs to `ownerId`. */
+export async function getOrder(db: Db, ownerId: string, sessionId: string): Promise<Order | undefined> {
+  return findOrder(db, and(eq(checkouts.stripeSessionId, sessionId), eq(orders.userId, ownerId))!);
+}
+
+async function findOrder(db: Db, where: SQL): Promise<Order | undefined> {
+  const [order] = await db
+    .select({
+      number: orders.number,
+      email: orders.email,
+      name: orders.deliveryName,
+      line1: orders.deliveryLine1,
+      line2: orders.deliveryLine2,
+      city: orders.deliveryCity,
+      postalCode: orders.deliveryPostalCode,
+      country: orders.deliveryCountry,
+      totalCents: orders.totalCents,
+    })
+    .from(orders)
+    .innerJoin(checkouts, eq(checkouts.id, orders.checkoutId))
+    .where(where);
+  if (!order) return undefined;
+  const items = await db
+    .select({
+      productSlug: products.slug,
+      productName: orderItems.productName,
+      images: products.images,
+      quantity: orderItems.quantity,
+      unitPriceCents: orderItems.unitPriceCents,
+    })
+    .from(orderItems)
+    .innerJoin(products, eq(products.id, orderItems.productId))
+    .where(eq(orderItems.orderNumber, order.number))
+    .orderBy(asc(orderItems.productId));
+  const { number, email, totalCents, ...deliveryAddress } = order;
+  return {
+    number: `LUX-${number}`,
+    items: items.map(({ images, ...item }) => ({ ...item, packshot: images[0] })),
+    totalCents,
+    email,
+    deliveryAddress,
+  };
 }
 
 /** The closing rule: ends the Checkout's session first, and returns its units only once it can no longer be paid. */

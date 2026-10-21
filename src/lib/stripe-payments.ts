@@ -41,6 +41,23 @@ function deliveryAddressOf(session: Stripe.Checkout.Session): DeliveryAddress | 
 
 const isPaid = (session: Stripe.Checkout.Session) => session.status === "complete" || session.payment_status === "paid";
 
+/** A Checkout event from Stripe's webhook: a session paid ("completed") or run out ("expired"). */
+export type CheckoutEvent = { type: "completed" | "expired"; sessionId: string } | { type: "other" };
+
+/**
+ * Reads a webhook request from Stripe, once its signature checks out against the raw body and
+ * `STRIPE_WEBHOOK_SECRET`; throws if it does not.
+ */
+export function checkoutEventOf(rawBody: string, signature: string | null): CheckoutEvent {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET is not set");
+  if (!signature) throw new Error("The request has no Stripe signature");
+  const event = Stripe.webhooks.constructEvent(rawBody, signature, secret);
+  if (event.type === "checkout.session.completed") return { type: "completed", sessionId: event.data.object.id };
+  if (event.type === "checkout.session.expired") return { type: "expired", sessionId: event.data.object.id };
+  return { type: "other" };
+}
+
 export const stripePayments: Payments = {
   async createSession({ checkoutId, items, email, expiresAt, successUrl, cancelUrl }) {
     const session = await stripe().checkout.sessions.create({

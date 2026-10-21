@@ -15,6 +15,8 @@ type BagContextValue = {
   /** Opens the Bag drawer and reloads the Bag, so its prices and Stock flags are current. */
   openBag: () => void;
   closeBag: () => void;
+  /** Reloads the Bag after it changed elsewhere (an Order took its bought units). */
+  reloadBag: () => void;
 };
 
 // Not `emptyBag` from the Bag module: importing a value from it would pull the database code into the browser bundle
@@ -74,7 +76,11 @@ export function BagProvider({ children }: { children: ReactNode }) {
   const shown = shownBag && (userId ? shownBag.ownerId === userId : shownBag.beforeSession);
   const bag = shown ? shownBag.bag : noBag;
   return (
-    <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false) }}>{children}</BagContext>
+    <BagContext
+      value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false), reloadBag: () => userId && load(userId) }}
+    >
+      {children}
+    </BagContext>
   );
 }
 

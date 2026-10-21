@@ -23,7 +23,7 @@ export async function startCheckoutAction(): Promise<CheckoutStart | SignedOut> 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   if (!appUrl) throw new Error("NEXT_PUBLIC_APP_URL is not set");
   const result = await startCheckout(db, stripePayments, ownerId, {
-    // Stripe fills in the session id. A placeholder page until a paid Checkout becomes an Order (#25).
+    // Stripe fills in the session id; the confirmation page makes and shows the Order
     successUrl: `${appUrl}/checkout/confirmation?session_id={CHECKOUT_SESSION_ID}`,
     // Stripe's back link; it releases the Checkout once that route exists (#26)
     cancelUrl: `${appUrl}/`,

@@ -50,6 +50,13 @@
       "when": 1792580785075,
       "tag": "0006_checkout_items_follow_products",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792605390452,
+      "tag": "0007_orders",
+      "breakpoints": true
     }
   ]
 }
