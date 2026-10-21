@@ -14,3 +14,7 @@ Flag any `.then(...)` or awaited call that sets state and misses one of these tw
 ## Writes without a session
 
 A server function or route handler is reachable by a direct POST from anyone. When it writes rows for a caller with no session (for example creating an anonymous user), repeated requests must be bounded by a limit per client (or an idempotency key), with the choice recorded in an ADR. Checking that the request can succeed before anything is created is a useful extra guard, but it does not bound repeated valid requests. Flag any such write that a script could repeat without limit.
+
+## Scripts that write auth rows
+
+A seed or dev script that creates or changes users, accounts or sessions touches only identities it owns: an address on the reserved `example.test` domain, never one taken from input as is. It must never reset the password or sessions of an account it did not create. Example: `seedTestUser` in `src/db/seed.ts`. The same goes for credentials in committed files: `.env.example` holds empty values or `@example.test` placeholders, never a usable password.

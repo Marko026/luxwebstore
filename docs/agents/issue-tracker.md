@@ -24,6 +24,14 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 - **List external PRs for triage**: `gh api --paginate 'repos/{owner}/{repo}/pulls?state=open' --jq '.[] | select(.author_association | IN("OWNER","MEMBER","COLLABORATOR") | not) | {number, title, author: .user.login, author_association, labels: [.labels[].name]}'`.
 - **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
+## CodeRabbit findings on a PR
+
+CodeRabbit's inline comments are mostly HTML and the scripts it ran. List each finding as one line (file, line, severity, title), then read the full body only of the ones you act on:
+
+`gh api --paginate 'repos/{owner}/{repo}/pulls/<number>/comments' --jq '.[] | select(.user.login == "coderabbitai[bot]") | (.body | gsub("<[^>]*>"; "") | split("\n") | map(select(startswith("**")))) as $b | "\(.path):\(.line // .original_line) \($b[0]) \($b | map(select(contains("|") | not)) | first)"'`
+
+Comments keep arriving after a review's first batch (security findings come later), so list them again right before merging.
+
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
 ## When a skill says "publish to the issue tracker"
