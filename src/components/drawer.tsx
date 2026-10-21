@@ -34,11 +34,12 @@ export function Drawer({
   const closeButton = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   // Escape closes; Tab and Shift+Tab wrap around inside the panel instead of reaching the page under the backdrop.
+  // Only controls Tab can reach count as the ends: not inert, not hidden, not tabIndex -1.
   const onKeyDown = useEffectEvent((e: KeyboardEvent) => {
     if (e.key === "Escape") onClose();
     if (e.key !== "Tab" || !panel.current) return;
     const focusable = [...panel.current.querySelectorAll<HTMLElement>(focusableSelector)].filter(
-      (el) => !el.closest("[inert]"),
+      (el) => el.tabIndex >= 0 && !el.closest("[inert]") && el.checkVisibility({ visibilityProperty: true }),
     );
     const outside = !panel.current.contains(document.activeElement);
     if (outside || document.activeElement === (e.shiftKey ? focusable[0] : focusable.at(-1))) {
