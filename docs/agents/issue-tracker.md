@@ -28,7 +28,7 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 
 CodeRabbit's inline comments are mostly HTML and the scripts it ran. List each finding as one line (file, line, severity, title), then read the full body only of the ones you act on:
 
-`gh api 'repos/{owner}/{repo}/pulls/<number>/comments' --jq '.[] | select(.user.login == "coderabbitai[bot]") | (.body | gsub("<[^>]*>"; "") | split("\n") | map(select(startswith("**")))) as $b | "\(.path):\(.line // .original_line) \($b[0]) \($b | map(select(contains("|") | not)) | first)"'`
+`gh api --paginate 'repos/{owner}/{repo}/pulls/<number>/comments' --jq '.[] | select(.user.login == "coderabbitai[bot]") | (.body | gsub("<[^>]*>"; "") | split("\n") | map(select(startswith("**")))) as $b | "\(.path):\(.line // .original_line) \($b[0]) \($b | map(select(contains("|") | not)) | first)"'`
 
 Comments keep arriving after a review's first batch (security findings come later), so list them again right before merging.
 
