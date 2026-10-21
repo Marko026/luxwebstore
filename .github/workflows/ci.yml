@@ -1,4 +1,4 @@
-# Lint and type-check every PR and push to main.
+# Lint, type-check and test every PR and push to main. Tests run on in-process PGlite, so they need no secrets.
 # No build here: `next build` prerenders from the database, and CI has no DATABASE_URL.
 name: CI
 
@@ -24,3 +24,4 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test

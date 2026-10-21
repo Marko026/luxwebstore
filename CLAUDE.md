@@ -35,7 +35,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - Next 16 has breaking changes: read `node_modules/next/dist/docs/` before writing Next code.
 - Secrets live in `.env` (see `.env.example`). Never commit or print them.
 - Ask before running any migration or `db:push`.
-- Before calling work done, run `npm test`, `npm run lint`, `npm run typecheck` and `npm run build`. CI runs lint and typecheck on every PR.
+- Before calling work done, run `npm test`, `npm run lint`, `npm run typecheck` and `npm run build`. CI runs lint, typecheck and tests on every PR.
 - Before checking UI in the browser pane, read `docs/agents/browser-checks.md`.
 
 ## Agent skills
