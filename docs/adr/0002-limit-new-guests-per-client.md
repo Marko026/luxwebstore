@@ -13,6 +13,9 @@ ADR 0001 signs a Guest in anonymously on their first "Add to bag". That server f
 
 - The first "Add to bag" without a session costs one more write. Later adds don't touch the counter.
 - Shoppers behind one shared IP (an office, carrier NAT) share the 10 per hour. A refused Guest sees "Too many requests. Please try again later."
-- When no client IP can be trusted, for example a host that does not set `x-forwarded-for` or has proxies `auth` isn't told about, all such clients share one limit. Set `advanced.ipAddress` in `src/lib/auth.ts` for the chosen host.
+- The limit is only as good as the client IP, so `advanced.ipAddress` in `src/lib/auth.ts` must match the chosen host:
+  - A host that sets a single `x-forwarded-for` (Vercel, for one) works as is.
+  - A host that passes the client's own `x-forwarded-for` through, such as `next start` with no proxy in front, lets a script send a new IP each time and so skip the limit.
+  - A host that appends to the header, through proxies `auth` isn't told about, leaves no IP to trust. All such clients then share one limit, which a script can use up for everyone.
 - The window is fixed, starting at a key's first request, so up to twice the limit can pass around a window's end.
 - `addToBag` still makes the Stock check that counts. A product that sells out between the check and the add still leaves a new Guest with an empty Bag.
