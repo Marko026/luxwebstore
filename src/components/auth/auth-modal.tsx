@@ -52,7 +52,7 @@ function ErrorIcon() {
 
 /**
  * Sign in / create account over the current page, on a native <dialog> (focus trap, Esc and backdrop for free).
- * On success the session updates in place and the modal closes, so the visitor stays where they were.
+ * On success the session updates in place and the modal closes, so the Guest stays where they were.
  * Validation is the server's (except a required name): its errors show under the field they concern.
  */
 export function AuthModal({ open, onClose }: { open: boolean; onClose: () => void }) {

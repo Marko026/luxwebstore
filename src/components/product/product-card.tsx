@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { formatPrice, productHref, stockState, type Product } from "@/lib/products";
 
-/** Packshot on the page ground with name and price under it, like the home category row. No border, no cart button. */
+/** Packshot on the page ground with name and price under it, like the home category row. No border, no "Add to bag" button. */
 export function ProductCard({ product, sizes }: { product: Product; sizes: string }) {
   const photo = product.gallery[0];
   const soldOut = stockState(product.stock) === "sold-out";

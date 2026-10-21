@@ -119,7 +119,7 @@ async function ProductDetails({ params }: { params: PageProps<"/products/[slug]"
           <AddToBagButton slug={product.slug} soldOut={soldOut} />
           {soldOut && (
             <a href="#contact" className="mt-4 inline-block text-xs">
-              <span className="link-wipe">Contact us about availability</span>
+              <span className="link-wipe">Contact us about restocking</span>
             </a>
           )}
 
