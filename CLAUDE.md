@@ -20,6 +20,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 - `src/db/queries/products.ts` — cached catalog reads used by pages; `src/lib/products.ts` — `Product` type + display helpers
 - `npm run build` queries the DB (prerender), so it needs `DATABASE_URL` and migrated tables
 - `src/lib/auth.ts` (server) / `auth-client.ts` (client) — Better Auth
+- `src/lib/checkout.ts` — the Checkout module (spec #21, ADR 0004); takes `db` and a `Payments` port (`src/lib/payments.ts`): `stripe-payments.ts` in the app, `src/test/fake-payments.ts` in tests
 - `src/app/api/auth/[...all]` — auth route handler
 - `docs/design-reference.md` — visual rules and deliberate departures (header, grid, buttons, drawer); read before UI or layout work
 
@@ -30,6 +31,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 
 ## Environment
 - Required in `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`.
+- Checkout needs `STRIPE_SECRET_KEY`, a test-mode key (`sk_test_`); the app refuses any other. Never use live keys.
 
 ## Rules
 - Next 16 has breaking changes: read `node_modules/next/dist/docs/` before writing Next code.
