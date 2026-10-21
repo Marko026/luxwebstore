@@ -52,7 +52,7 @@ async function Confirmation({ searchParams }: Pick<PageProps<"/checkout/confirma
       <div className="text-center">
         <h1 className="text-2xl font-thin">Thank you</h1>
         <p className="mt-3 text-sm">
-          Your Order <span className="font-bold">{order.number}</span> is confirmed.
+          Your order <span className="font-bold">{order.number}</span> is confirmed.
         </p>
       </div>
 

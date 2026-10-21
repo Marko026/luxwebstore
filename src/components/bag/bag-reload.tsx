@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useBag } from "@/components/bag/bag-provider";
 
 /**
@@ -9,8 +9,8 @@ import { useBag } from "@/components/bag/bag-provider";
  */
 export function BagReload() {
   const { reloadBag } = useBag();
-  // Once per mount: `reloadBag` is a new function on every render of the provider
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(reloadBag, []);
+  // Once per mount, with whoever is signed in by then
+  const onShown = useEffectEvent(reloadBag);
+  useEffect(() => onShown(), []);
   return null;
 }

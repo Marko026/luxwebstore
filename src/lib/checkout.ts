@@ -169,9 +169,7 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
   let closed = 0;
   for (const checkout of expired) {
     try {
-      const result = await closeCheckout(db, payments, checkout);
-      if (result === "closed") closed++;
-      if (result === "already-paid") await completeCheckout(db, payments, checkout.stripeSessionId!);
+      if ((await closeOrComplete(db, payments, checkout)) === "closed") closed++;
     } catch (error) {
       // One unreachable session must not hold up the others, nor the Checkout whose start runs this sweep
       console.error(`Could not close Checkout ${checkout.id}`, error);
@@ -246,6 +244,7 @@ export async function completeCheckout(db: Db, payments: Payments, sessionId: st
       .from(orders)
       .where(eq(orders.checkoutId, checkout.id));
     if (existing) return;
+    // Not checked against "closed": closing ends the session first, so a closed Checkout is never paid
 
     const items = await tx
       .select({
@@ -314,9 +313,7 @@ export async function expireCheckout(db: Db, payments: Payments, sessionId: stri
     .select({ id: checkouts.id, stripeSessionId: checkouts.stripeSessionId })
     .from(checkouts)
     .where(and(eq(checkouts.stripeSessionId, sessionId), eq(checkouts.state, "open")));
-  if (checkout && (await closeCheckout(db, payments, checkout)) === "already-paid") {
-    await completeCheckout(db, payments, sessionId);
-  }
+  if (checkout) await closeOrComplete(db, payments, checkout);
 }
 
 /** The Order of the Checkout with this Stripe session, only if it belongs to `ownerId`. */
@@ -367,6 +364,14 @@ async function findOrder(db: Db, where: SQL): Promise<Order | undefined> {
 async function closeCheckout(db: Db, payments: Payments, checkout: OpenCheckout) {
   if ((await endSession(payments, checkout)) === "already-paid") return "already-paid";
   return (await closeOpenCheckout(db, checkout)) ? "closed" : "not-open";
+}
+
+/** The closing rule, and a Checkout that turns out paid becomes an Order instead. */
+async function closeOrComplete(db: Db, payments: Payments, checkout: OpenCheckout) {
+  const result = await closeCheckout(db, payments, checkout);
+  // Only a Checkout with a session can turn out paid
+  if (result === "already-paid") await completeCheckout(db, payments, checkout.stripeSessionId!);
+  return result;
 }
 
 async function openCheckoutOf(db: Db, ownerId: string): Promise<OpenCheckout | undefined> {

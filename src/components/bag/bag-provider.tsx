@@ -73,14 +73,14 @@ export function BagProvider({ children }: { children: ReactNode }) {
     if (userId) load(userId);
   };
 
+  const reloadBag = () => {
+    if (userId) load(userId);
+  };
+
   const shown = shownBag && (userId ? shownBag.ownerId === userId : shownBag.beforeSession);
   const bag = shown ? shownBag.bag : noBag;
   return (
-    <BagContext
-      value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false), reloadBag: () => userId && load(userId) }}
-    >
-      {children}
-    </BagContext>
+    <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false), reloadBag }}>{children}</BagContext>
   );
 }
 

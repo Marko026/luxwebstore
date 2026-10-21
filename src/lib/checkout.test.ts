@@ -289,6 +289,22 @@ describe("completeCheckout", () => {
     expect(await stockInBag(owner, slug)).toBe(2);
   });
 
+  it("makes the Order of a Checkout already marked paid, as moving a Guest's Checkouts can leave one", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 3 });
+    await inBag(owner, slug);
+    await start(owner);
+    const session = lastSession();
+    stripe.markPaid(session.id);
+    // Setup only: what `moveCheckouts` does to an older open Checkout that Stripe reports paid
+    await db.update(checkouts).set({ state: "paid" }).where(eq(checkouts.stripeSessionId, session.id));
+
+    expect(await complete(session.id)).toMatchObject({ status: "completed" });
+
+    expect(await getOrder(db, owner, session.id)).toBeDefined();
+    expect(await bagOf(owner)).toEqual([]);
+  });
+
   it("knows no session that is not a Checkout's", async () => {
     expect(await complete("cs_test_not_ours")).toEqual({ status: "unknown-session" });
   });
