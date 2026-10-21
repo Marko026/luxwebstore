@@ -13,3 +13,4 @@ Payment runs on Stripe's hosted Checkout page, and we learn it succeeded from St
 - Someone who abandons a Checkout holds its units for up to 30 minutes.
 - Units come back on Stripe's expiry event and also from a sweep of Checkouts older than 30 minutes, so a missed event does not leak Stock.
 - The Order is created by one idempotent step, called from both Stripe's webhook and the confirmation page; what was bought and at what price comes from our Checkout, not from Stripe's line items.
+- An Order copies everything it needs from its Checkout, so its link to the Checkout is cleared, not enforced, when the Checkout is deleted with a stale Guest. Deleting a Guest never fails because of an Order and never takes one with it.
