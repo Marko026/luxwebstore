@@ -10,8 +10,8 @@ import { removeFromBagAction, setQuantityAction } from "@/lib/bag-actions";
 import { formatPrice, productHref } from "@/lib/products";
 
 function noteFor(item: BagItem) {
-  if (item.availability === "sold-out") return "Sold out";
-  if (item.availability === "short") return `Only ${item.stock} left`;
+  if (item.stockStatus === "sold-out") return "Sold out";
+  if (item.stockStatus === "short") return `Only ${item.stock} left`;
   return "";
 }
 
@@ -67,7 +67,7 @@ export function BagDrawer() {
             <ul aria-busy={pending} className="flex-1 overflow-y-auto px-8 sm:pl-16">
               {bag.items.map((item) => {
                 const note = noteFor(item);
-                const soldOut = item.availability === "sold-out";
+                const soldOut = item.stockStatus === "sold-out";
                 return (
                   <li key={item.slug} className="flex gap-5 py-4">
                     <Link

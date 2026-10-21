@@ -218,8 +218,8 @@ describe("getBag", () => {
 
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual([
-      expect.objectContaining({ slug: tote, availability: "available" }),
-      expect.objectContaining({ slug: clutch, quantity: 1, availability: "sold-out" }),
+      expect.objectContaining({ slug: tote, stockStatus: "in-stock" }),
+      expect.objectContaining({ slug: clutch, quantity: 1, stockStatus: "sold-out" }),
     ]);
     expect(bag.subtotalCents).toBe(120_000);
   });
@@ -232,7 +232,7 @@ describe("getBag", () => {
     await setStock(slug, 2);
 
     const bag = await getBag(db, owner);
-    expect(bag.items).toEqual([expect.objectContaining({ slug, quantity: 4, stock: 2, availability: "short" })]);
+    expect(bag.items).toEqual([expect.objectContaining({ slug, quantity: 4, stock: 2, stockStatus: "short" })]);
   });
 
   it("drops a Bag item when its product is removed from the catalogue", async () => {
@@ -312,8 +312,8 @@ describe("mergeBags", () => {
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ slug: inBoth, quantity: 3, availability: "available" }),
-        expect.objectContaining({ slug: guestOnly, quantity: 2, availability: "available" }),
+        expect.objectContaining({ slug: inBoth, quantity: 3, stockStatus: "in-stock" }),
+        expect.objectContaining({ slug: guestOnly, quantity: 2, stockStatus: "in-stock" }),
       ]),
     );
     expect(bag.items).toHaveLength(2);
@@ -355,8 +355,8 @@ describe("mergeBags", () => {
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ slug: guestOnly, quantity: 1, availability: "sold-out" }),
-        expect.objectContaining({ slug: inBoth, quantity: 1, availability: "sold-out" }),
+        expect.objectContaining({ slug: guestOnly, quantity: 1, stockStatus: "sold-out" }),
+        expect.objectContaining({ slug: inBoth, quantity: 1, stockStatus: "sold-out" }),
       ]),
     );
     expect(bag.items).toHaveLength(2);

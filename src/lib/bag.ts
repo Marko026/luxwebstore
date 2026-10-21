@@ -17,15 +17,15 @@ export type BagItem = {
   priceCents: number;
   stock: number;
   quantity: number;
-  availability: Availability;
+  stockStatus: StockStatus;
 };
 
 /** "short": more units in the Bag than are in Stock ("Only N left"). "sold-out": Stock is 0. */
-export type Availability = "available" | "short" | "sold-out";
+export type StockStatus = "in-stock" | "short" | "sold-out";
 
-function availabilityOf(quantity: number, stock: number): Availability {
+function stockStatusOf(quantity: number, stock: number): StockStatus {
   if (stock <= 0) return "sold-out";
-  return quantity > stock ? "short" : "available";
+  return quantity > stock ? "short" : "in-stock";
 }
 
 export type Bag = {
@@ -128,14 +128,14 @@ export async function getBag(db: Db, ownerId: string): Promise<Bag> {
   const items = rows.map(({ images, ...row }) => ({
     ...row,
     packshot: images[0],
-    availability: availabilityOf(row.quantity, row.stock),
+    stockStatus: stockStatusOf(row.quantity, row.stock),
   }));
   return {
     items,
     units: items.reduce((sum, item) => sum + item.quantity, 0),
     // A short Bag item still counts at its quantity: it is flagged, and the shopper lowers it themselves
     subtotalCents: items
-      .filter((item) => item.availability !== "sold-out")
+      .filter((item) => item.stockStatus !== "sold-out")
       .reduce((sum, item) => sum + item.priceCents * item.quantity, 0),
   };
 }
