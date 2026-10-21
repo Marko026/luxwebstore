@@ -289,7 +289,7 @@ describe("moveCheckouts", () => {
     expect(await stockInBag(account, guestSlug)).toBe(1);
   });
 
-  it("keeps the older one when it was already paid, closing the newer one instead", async () => {
+  it("keeps both when the older one was already paid: its units stay bought, the newer one stays open", async () => {
     const guest = await aGuest();
     const account = await aUser();
     const accountSlug = await aProduct({ stock: 2 });
@@ -303,11 +303,16 @@ describe("moveCheckouts", () => {
     const newerSession = lastSession();
 
     await move(guest, account);
+    await deleteGuest(guest);
 
     expect(olderSession.state).toBe("paid");
-    expect(newerSession.state).toBe("expired");
+    expect(newerSession.state).toBe("open");
     expect(await stockInBag(account, accountSlug)).toBe(1);
-    expect(await stockInBag(guest, guestSlug)).toBe(2);
+    await inBag(account, guestSlug);
+    expect(await stockInBag(account, guestSlug)).toBe(1);
+    // The newer one is the account's one open Checkout: its next start ends it, and the paid one is no longer open
+    expect(await start(account)).toMatchObject({ status: "started" });
+    expect(newerSession.state).toBe("expired");
   });
 });
 
