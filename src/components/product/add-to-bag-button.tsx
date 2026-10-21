@@ -44,7 +44,8 @@ export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boole
         setMessage("Something went wrong. Please try again.");
         return;
       }
-      setBag(result.bag);
+      // Shown at once, even for a Guest the client doesn't know is signed in yet: the result names the Bag's owner
+      setBag(result);
       setMessage(messageFor(result));
       // Only a unit that went in opens the drawer; "Only N available" and "Just sold out" stay on the page
       if (result.status === "added") openBag();

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useBag } from "@/components/bag/bag-provider";
 import { Drawer } from "@/components/drawer";
-import type { Bag, BagItem } from "@/lib/bag";
-import { removeFromBagAction, setQuantityAction } from "@/lib/bag-actions";
+import type { BagItem } from "@/lib/bag";
+import { removeFromBagAction, setQuantityAction, type OwnedBag, type SignedOut } from "@/lib/bag-actions";
 import { formatPrice, productHref } from "@/lib/products";
 
 function noteFor(item: BagItem) {
@@ -25,26 +25,23 @@ export function BagDrawer() {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
-  const change = (write: () => Promise<Bag | null>) => {
+  // Shows the Bag the change returns, even a rejected quantity's (Stock changed meanwhile): it flags the Bag item.
+  // Signed out meanwhile: nothing changed, and the provider stops showing the Bag once the session is gone.
+  const runBagChange = (bagChange: () => Promise<OwnedBag | SignedOut>) => {
     if (pending) return;
     setError("");
     startTransition(async () => {
       try {
-        const next = await write();
-        if (next) setBag(next);
+        const result = await bagChange();
+        if ("bag" in result) setBag(result);
       } catch {
         setError("Something went wrong. Please try again.");
       }
     });
   };
 
-  const setQuantity = (slug: string, quantity: number) =>
-    change(async () => {
-      const result = await setQuantityAction(slug, quantity);
-      // A rejected quantity (Stock changed meanwhile) still returns the current Bag, which flags the Bag item
-      return result.status === "signed-out" ? null : result.bag;
-    });
-  const remove = (slug: string) => change(() => removeFromBagAction(slug));
+  const setQuantity = (slug: string, quantity: number) => runBagChange(() => setQuantityAction(slug, quantity));
+  const remove = (slug: string) => runBagChange(() => removeFromBagAction(slug));
 
   const label = "text-xs font-bold tracking-[-0.05em] uppercase";
 
