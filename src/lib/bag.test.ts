@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { categories, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
-import { addToBag, getBag, removeFromBag, setQuantity } from "./bag";
+import { addToBag, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
@@ -247,6 +247,131 @@ describe("getBag", () => {
     const bag = await getBag(db, owner);
     expect(bag.items).toEqual([expect.objectContaining({ slug: kept })]);
     expect(bag.units).toBe(1);
+  });
+});
+
+describe("mergeBags", () => {
+  it("moves a Guest's Bag items into the User's Bag when they share no product", async () => {
+    const guest = await aGuest();
+    const owner = await aUser();
+    const fromGuest = await aProduct();
+    const fromUser = await aProduct();
+    await addToBag(db, guest, fromGuest);
+    await addToBag(db, guest, fromGuest);
+    await addToBag(db, owner, fromUser);
+
+    await mergeBags(db, guest, owner);
+
+    const bag = await getBag(db, owner);
+    expect(bag.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: fromUser, quantity: 1 }),
+        expect.objectContaining({ slug: fromGuest, quantity: 2 }),
+      ]),
+    );
+    expect(bag.units).toBe(3);
+    expect((await getBag(db, guest)).items).toEqual([]);
+  });
+
+  it("keeps the larger quantity, not the sum, for a product in both Bags", async () => {
+    const guest = await aGuest();
+    const owner = await aUser();
+    const moreAsGuest = await aProduct({ stock: 10 });
+    const moreAsUser = await aProduct({ stock: 10 });
+    for (let i = 0; i < 3; i++) await addToBag(db, guest, moreAsGuest);
+    await addToBag(db, owner, moreAsGuest);
+    await addToBag(db, guest, moreAsUser);
+    for (let i = 0; i < 2; i++) await addToBag(db, owner, moreAsUser);
+
+    await mergeBags(db, guest, owner);
+
+    const bag = await getBag(db, owner);
+    expect(bag.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: moreAsGuest, quantity: 3 }),
+        expect.objectContaining({ slug: moreAsUser, quantity: 2 }),
+      ]),
+    );
+    expect(bag.items).toHaveLength(2);
+    expect((await getBag(db, guest)).items).toEqual([]);
+  });
+
+  it("caps the merged quantity at the Stock", async () => {
+    const guest = await aGuest();
+    const owner = await aUser();
+    const inBoth = await aProduct({ stock: 5 });
+    const guestOnly = await aProduct({ stock: 5 });
+    for (let i = 0; i < 4; i++) await addToBag(db, guest, inBoth);
+    for (let i = 0; i < 2; i++) await addToBag(db, owner, inBoth);
+    for (let i = 0; i < 4; i++) await addToBag(db, guest, guestOnly);
+
+    await setStock(inBoth, 3);
+    await setStock(guestOnly, 2);
+    await mergeBags(db, guest, owner);
+
+    const bag = await getBag(db, owner);
+    expect(bag.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: inBoth, quantity: 3, availability: "available" }),
+        expect.objectContaining({ slug: guestOnly, quantity: 2, availability: "available" }),
+      ]),
+    );
+    expect(bag.items).toHaveLength(2);
+  });
+
+  it("turns a Guest's Bag into the Bag of a new account that had none", async () => {
+    const guest = await aGuest();
+    const newUser = await aUser();
+    const tote = await aProduct({ priceCents: 120_000 });
+    const clutch = await aProduct({ priceCents: 45_000 });
+    await addToBag(db, guest, tote);
+    await addToBag(db, guest, clutch);
+    await addToBag(db, guest, clutch);
+
+    await mergeBags(db, guest, newUser);
+
+    expect(await getBag(db, newUser)).toMatchObject({
+      items: [expect.objectContaining({ slug: tote, quantity: 1 }), expect.objectContaining({ slug: clutch, quantity: 2 })],
+      units: 3,
+      subtotalCents: 210_000,
+    });
+    expect(await getBag(db, guest)).toMatchObject({ items: [], units: 0 });
+  });
+
+  it("keeps a sold-out Bag item, flagged, so nothing disappears in the merge", async () => {
+    const guest = await aGuest();
+    const owner = await aUser();
+    const guestOnly = await aProduct();
+    const inBoth = await aProduct();
+    await addToBag(db, guest, guestOnly);
+    await addToBag(db, guest, guestOnly);
+    await addToBag(db, guest, inBoth);
+    await addToBag(db, owner, inBoth);
+
+    await setStock(guestOnly, 0);
+    await setStock(inBoth, 0);
+    await mergeBags(db, guest, owner);
+
+    const bag = await getBag(db, owner);
+    expect(bag.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ slug: guestOnly, quantity: 1, availability: "sold-out" }),
+        expect.objectContaining({ slug: inBoth, quantity: 1, availability: "sold-out" }),
+      ]),
+    );
+    expect(bag.items).toHaveLength(2);
+    expect(bag.subtotalCents).toBe(0);
+  });
+
+  it("leaves a Bag as it was when merged into itself", async () => {
+    const owner = await aUser();
+    const slug = await aProduct();
+    await addToBag(db, owner, slug);
+    await addToBag(db, owner, slug);
+
+    await mergeBags(db, owner, owner);
+
+    expect((await getBag(db, owner)).items).toEqual([expect.objectContaining({ slug, quantity: 2 })]);
   });
 });
 
