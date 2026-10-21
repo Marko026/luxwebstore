@@ -1,0 +1,2 @@
+# Gitignored files Claude Code copies into each worktree it creates (parallel sessions), so dev, build and browser checks work there.
+.env
