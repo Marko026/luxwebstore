@@ -1,10 +1,8 @@
-import { deleteStaleGuests } from "./bag";
-import { bagItems } from "@/db/schema";
-import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { categories, products, user } from "@/db/schema";
+import { beforeAll, describe, expect, it } from "vitest";
+import { bagItems, categories, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
-import { addToBag, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
+import { addToBag, deleteStaleGuests, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
