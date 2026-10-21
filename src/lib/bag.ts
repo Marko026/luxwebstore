@@ -170,10 +170,36 @@ export async function addToBag(db: Db, ownerId: string, productSlug: string): Pr
   if (row) return { status: "added", quantity: row.quantity };
 
   // Nothing was written; read the Stock only to say why (no write depends on this read).
+  const stock = await stockOf(db, productSlug);
+  if (stock === undefined) return { status: "unknown-product" };
+  if (stock === 0) return { status: "sold-out" };
+  return { status: "capped", available: stock };
+}
+
+async function stockOf(db: Db, productSlug: string): Promise<number | undefined> {
   const [product] = await db.select({ stock: products.stock }).from(products).where(eq(products.slug, productSlug));
-  if (!product) return { status: "unknown-product" };
-  if (product.stock === 0) return { status: "sold-out" };
-  return { status: "capped", available: product.stock };
+  return product?.stock;
+}
+
+/** A first "Add to bag" that created no Guest, so there is no Bag. "too-many-guests": `createGuest` refused. */
+export type NewGuestRefusal = { status: "sold-out" } | { status: "unknown-product" } | { status: "too-many-guests" };
+
+/**
+ * The first "Add to bag" of a Guest with no session yet. `createGuest` signs them in and returns their id, or null to
+ * refuse (too many new Guests from one client, ADR 0002). It runs only for a product in Stock, so a request that
+ * cannot add anything creates no Guest. `addToBag` still makes the Stock check that counts: Stock can change between.
+ */
+export async function addToBagAsNewGuest(
+  db: Db,
+  productSlug: string,
+  createGuest: () => Promise<string | null>,
+): Promise<(AddToBagResult & { ownerId: string }) | NewGuestRefusal> {
+  const stock = await stockOf(db, productSlug);
+  if (stock === undefined) return { status: "unknown-product" };
+  if (stock === 0) return { status: "sold-out" };
+  const ownerId = await createGuest();
+  if (!ownerId) return { status: "too-many-guests" };
+  return { ...(await addToBag(db, ownerId, productSlug)), ownerId };
 }
 
 /**

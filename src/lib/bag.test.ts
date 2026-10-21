@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { bagItems, categories, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
-import { addToBag, deleteStaleGuests, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
+import { addToBag, addToBagAsNewGuest, deleteStaleGuests, getBag, mergeBags, removeFromBag, setQuantity } from "./bag";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
@@ -111,6 +111,70 @@ describe("addToBag", () => {
     expect(await addToBag(db, guest, slug)).toEqual({ status: "capped", available: 2 });
 
     expect(await getBag(db, guest)).toMatchObject({ items: [expect.objectContaining({ slug, quantity: 2 })], units: 2 });
+  });
+});
+
+describe("addToBagAsNewGuest", () => {
+  /** Stands in for the anonymous sign-in: counts the Guests it creates, or refuses like an exhausted limit. */
+  function guestCreator({ refuse = false } = {}) {
+    const created: string[] = [];
+    const createGuest = async () => {
+      if (refuse) return null;
+      const id = await aGuest();
+      created.push(id);
+      return id;
+    };
+    return { created, createGuest };
+  }
+
+  it("creates the Guest and puts one unit in their Bag", async () => {
+    const slug = await aProduct();
+    const { created, createGuest } = guestCreator();
+
+    const result = await addToBagAsNewGuest(db, slug, createGuest);
+
+    expect(created).toHaveLength(1);
+    expect(result).toEqual({ status: "added", quantity: 1, ownerId: created[0] });
+    expect(await getBag(db, created[0]!)).toMatchObject({ items: [expect.objectContaining({ slug })], units: 1 });
+  });
+
+  it("creates no Guest for a sold-out product", async () => {
+    const slug = await aProduct({ stock: 0 });
+    const { created, createGuest } = guestCreator();
+
+    expect(await addToBagAsNewGuest(db, slug, createGuest)).toEqual({ status: "sold-out" });
+    expect(created).toEqual([]);
+  });
+
+  it("creates no Guest for a product that is not in the catalogue", async () => {
+    const { created, createGuest } = guestCreator();
+
+    expect(await addToBagAsNewGuest(db, "no-such-bag", createGuest)).toEqual({ status: "unknown-product" });
+    expect(created).toEqual([]);
+  });
+
+  it("adds nothing when no Guest may be created", async () => {
+    const slug = await aProduct();
+    const { createGuest } = guestCreator({ refuse: true });
+
+    expect(await addToBagAsNewGuest(db, slug, createGuest)).toEqual({ status: "too-many-guests" });
+    const inBags = await db
+      .select({ ownerId: bagItems.userId })
+      .from(bagItems)
+      .innerJoin(products, eq(products.id, bagItems.productId))
+      .where(eq(products.slug, slug));
+    expect(inBags).toEqual([]);
+  });
+
+  it("still checks the Stock when it sells out while the Guest is created", async () => {
+    const slug = await aProduct({ stock: 1 });
+    const createGuest = async () => {
+      const id = await aGuest();
+      await setStock(slug, 0);
+      return id;
+    };
+
+    expect(await addToBagAsNewGuest(db, slug, createGuest)).toEqual({ status: "sold-out", ownerId: expect.any(String) });
   });
 });
 

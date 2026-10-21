@@ -72,6 +72,17 @@ export const bagItems = pgTable(
   ],
 );
 
+/** Requests counted per key, for `src/lib/rate-limit.ts`. An expired row is deleted by the next count. */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text().primaryKey(),
+    count: integer().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("rate_limits_expires_at_idx").on(t.expiresAt)],
+);
+
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));
