@@ -1,4 +1,5 @@
-// A Payments fake for tests: records every session and lets a test mark one paid or make the next create fail.
+// A Payments fake for tests: records every session and lets a test mark one paid, make the next create fail, or run
+// something while the next session is being created.
 import type { NewSession, Payments } from "@/lib/payments";
 
 type FakeSession = NewSession & { id: string; url: string; state: "open" | "paid" | "expired" };
@@ -6,6 +7,7 @@ type FakeSession = NewSession & { id: string; url: string; state: "open" | "paid
 export function fakePayments() {
   const sessions: FakeSession[] = [];
   let failNextCreate = false;
+  let duringNextCreate: (() => Promise<unknown>) | undefined;
 
   const find = (sessionId: string) => {
     const session = sessions.find((s) => s.id === sessionId);
@@ -15,6 +17,9 @@ export function fakePayments() {
 
   const payments: Payments = {
     async createSession(newSession) {
+      const during = duringNextCreate;
+      duringNextCreate = undefined;
+      await during?.();
       if (failNextCreate) {
         failNextCreate = false;
         throw new Error("Payment provider unavailable");
@@ -45,6 +50,10 @@ export function fakePayments() {
     },
     failNextCreate() {
       failNextCreate = true;
+    },
+    /** Runs `action` (another start, say) while the next session is being created, before it exists. */
+    duringNextCreate(action: () => Promise<unknown>) {
+      duringNextCreate = action;
     },
   };
 }

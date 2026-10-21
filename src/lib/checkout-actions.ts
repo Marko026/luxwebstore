@@ -2,7 +2,6 @@
 
 // Server function for "Checkout" in the Bag drawer: resolves the session and calls the Checkout module. No Checkout
 // rules here. Reachable by a direct POST, so it checks the session itself.
-import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { getBag } from "@/lib/bag";
 import type { OwnedBag, SignedOut } from "@/lib/bag-actions";
@@ -10,11 +9,14 @@ import { startCheckout, type StartCheckoutResult } from "@/lib/checkout";
 import { currentUserId } from "@/lib/current-user";
 import { stripePayments } from "@/lib/stripe-payments";
 
-/** Why no Checkout started, with the owner's Bag as it is now. */
-export type CheckoutRefusal = Exclude<StartCheckoutResult, { status: "started" }> & OwnedBag;
+/** A start's result (Stripe's payment page, or why not), with the owner's Bag as it is now. */
+export type CheckoutStart = StartCheckoutResult & OwnedBag;
 
-/** Starts a Checkout for whoever is signed in and redirects to Stripe's payment page; otherwise says why not. */
-export async function startCheckoutAction(): Promise<CheckoutRefusal | SignedOut> {
+/**
+ * Starts a Checkout for whoever is signed in. The client goes to the returned payment page itself: a `redirect` here
+ * would reject the call on the client, where it reads as a failure.
+ */
+export async function startCheckoutAction(): Promise<CheckoutStart | SignedOut> {
   const ownerId = await currentUserId();
   if (!ownerId) return { status: "signed-out" };
   // Checked before anything is held: without it Stripe refuses the session only after the units left Stock
@@ -26,7 +28,5 @@ export async function startCheckoutAction(): Promise<CheckoutRefusal | SignedOut
     // Stripe's back link; it releases the Checkout once that route exists (#26)
     cancelUrl: `${appUrl}/`,
   });
-  // Outside any try: `redirect` throws to navigate
-  if (result.status === "started") redirect(result.url);
   return { ...result, ownerId, bag: "bag" in result ? result.bag : await getBag(db, ownerId) };
 }

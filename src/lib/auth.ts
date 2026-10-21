@@ -4,6 +4,8 @@ import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
 import { db } from "@/db";
 import { mergeBags } from "@/lib/bag";
+import { closeCheckoutOf } from "@/lib/checkout";
+import { stripePayments } from "@/lib/stripe-payments";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
@@ -17,6 +19,13 @@ export const auth = betterAuth({
       // and its emptied Bag goes with it.
       onLinkAccount: async ({ anonymousUser, newUser }) => {
         await mergeBags(db, anonymousUser.user.id, newUser.user.id);
+        // The Guest's Checkouts are deleted with them, so an open one gives its units back first (#27 will move it to
+        // the account instead). A failure here must not block signing in, so it is only logged: those units are lost.
+        await closeCheckoutOf(db, stripePayments, anonymousUser.user.id)
+          .then((result) => {
+            if (result === "already-paid") console.error(`Guest ${anonymousUser.user.id} signed in with a paid Checkout`);
+          })
+          .catch((error) => console.error(`Could not close the Checkout of Guest ${anonymousUser.user.id}`, error));
       },
     }),
     // Lets a server function set the session cookie (the anonymous sign-in); must stay last

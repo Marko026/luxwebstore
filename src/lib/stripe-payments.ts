@@ -43,35 +43,31 @@ const isPaid = (session: Stripe.Checkout.Session) => session.status === "complet
 
 export const stripePayments: Payments = {
   async createSession({ checkoutId, items, email, expiresAt, successUrl, cancelUrl }) {
-    const session = await stripe().checkout.sessions.create(
-      {
-        mode: "payment",
-        // Card only, so a session is paid or not at once (no delayed methods such as SEPA debit)
-        allowed_payment_method_types: ["card"],
-        // Catalogue prices already include VAT; no Stripe Tax
-        line_items: items.map((item) => ({
-          quantity: item.quantity,
-          price_data: { currency: "eur", unit_amount: item.unitPriceCents, product_data: { name: item.name } },
-        })),
-        shipping_address_collection: { allowed_countries: [...euCountries] },
-        shipping_options: [
-          {
-            shipping_rate_data: {
-              type: "fixed_amount",
-              fixed_amount: { amount: 0, currency: "eur" },
-              display_name: "Free delivery",
-            },
+    const session = await stripe().checkout.sessions.create({
+      mode: "payment",
+      // Card only, so a session is paid or not at once (no delayed methods such as SEPA debit)
+      allowed_payment_method_types: ["card"],
+      // Catalogue prices already include VAT; no Stripe Tax
+      line_items: items.map((item) => ({
+        quantity: item.quantity,
+        price_data: { currency: "eur", unit_amount: item.unitPriceCents, product_data: { name: item.name } },
+      })),
+      shipping_address_collection: { allowed_countries: [...euCountries] },
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            type: "fixed_amount",
+            fixed_amount: { amount: 0, currency: "eur" },
+            display_name: "Free delivery",
           },
-        ],
-        customer_email: email ?? undefined,
-        expires_at: Math.max(toSeconds(expiresAt), toSeconds(new Date()) + minimumLifetimeSeconds),
-        client_reference_id: String(checkoutId),
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-      },
-      // A retried request for the same Checkout gets the same session, never a second payable one
-      { idempotencyKey: `checkout-${checkoutId}` },
-    );
+        },
+      ],
+      customer_email: email ?? undefined,
+      expires_at: Math.max(toSeconds(expiresAt), toSeconds(new Date()) + minimumLifetimeSeconds),
+      client_reference_id: String(checkoutId),
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    });
     if (!session.url) throw new Error(`Stripe returned no URL for session ${session.id}`);
     return { id: session.id, url: session.url };
   },

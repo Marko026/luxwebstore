@@ -4,7 +4,7 @@ import { bagItems, categories, checkouts, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
 import { fakePayments } from "@/test/fake-payments";
 import { addToBag, deleteStaleGuests, getBag, setQuantity } from "./bag";
-import { expireCheckouts, startCheckout } from "./checkout";
+import { closeCheckoutOf, expireCheckouts, startCheckout } from "./checkout";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
@@ -166,6 +166,24 @@ describe("startCheckout", () => {
     expect(await stockInBag(owner, slug)).toBe(1);
   });
 
+  it("lets a start that began meanwhile win: the slower start's page is ended and its units come back", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    let faster: Awaited<ReturnType<typeof start>> | undefined;
+    stripe.duringNextCreate(async () => {
+      faster = await start(owner);
+    });
+
+    await expect(start(owner)).rejects.toThrow();
+
+    expect(faster).toMatchObject({ status: "started" });
+    const [fasterSession, slowerSession] = stripe.sessions.slice(-2);
+    expect(fasterSession!.state).toBe("open");
+    expect(slowerSession!.state).toBe("expired");
+    expect(await stockInBag(owner, slug)).toBe(1);
+  });
+
   it("puts the units back when the payment page cannot be created", async () => {
     const owner = await aUser();
     const slug = await aProduct({ stock: 2 });
@@ -221,6 +239,33 @@ describe("expireCheckouts", () => {
     expect(await expireCheckouts(db, stripe.payments, new Date())).toBe(0);
 
     expect(await stockInBag(owner, slug)).toBe(1);
+  });
+});
+
+describe("closeCheckoutOf", () => {
+  it("ends a Guest's open Checkout and returns its units, so signing in loses nothing", async () => {
+    const guest = await aGuest();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(guest, slug);
+    await start(guest);
+
+    expect(await closeCheckoutOf(db, stripe.payments, guest)).toBe("closed");
+
+    expect(lastSession().state).toBe("expired");
+    expect(await stockInBag(guest, slug)).toBe(2);
+    expect(await closeCheckoutOf(db, stripe.payments, guest)).toBe("none");
+  });
+
+  it("leaves a paid Checkout open, its units still held", async () => {
+    const guest = await aGuest();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(guest, slug);
+    await start(guest);
+    stripe.markPaid(lastSession().id);
+
+    expect(await closeCheckoutOf(db, stripe.payments, guest)).toBe("already-paid");
+
+    expect(await stockInBag(guest, slug)).toBe(1);
   });
 });
 

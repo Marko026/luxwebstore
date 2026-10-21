@@ -2,7 +2,7 @@
 // port as parameters, so tests pass their own; nothing here imports Stripe.
 // A Checkout is closed only after its Stripe session can no longer be paid, and closing puts its units back in Stock in
 // the same transaction that marks it closed.
-import { and, asc, eq, lte, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
 import { bagItems, checkoutItems, checkouts, products, user } from "@/db/schema";
 import { getBag, type Bag, type Db } from "@/lib/bag";
 import type { Payments } from "@/lib/payments";
@@ -37,15 +37,14 @@ export async function startCheckout(
   await expireCheckouts(db, payments, new Date());
 
   // The earlier Checkout's page stops taking payment before its units go back
-  const [earlier] = await db
-    .select({ id: checkouts.id, stripeSessionId: checkouts.stripeSessionId })
-    .from(checkouts)
-    .where(and(eq(checkouts.userId, ownerId), eq(checkouts.state, "open")));
+  const earlier = await openCheckoutOf(db, ownerId);
   if (earlier && (await endSession(payments, earlier)) === "already-paid") return { status: "earlier-checkout-paid" };
 
   const expiresAt = new Date(Date.now() + checkoutMinutes * 60_000);
   const held = await db.transaction(async (tx) => {
-    if (earlier) await closeOpenCheckout(tx, earlier.id);
+    // If its start recorded a session meanwhile, it stays open and the insert below fails on "one open Checkout per
+    // owner": that session was never ended, so its units must stay held
+    if (earlier) await closeOpenCheckout(tx, earlier);
 
     // Locks the Bag's products until their units are out of Stock, in id order so two Checkouts never deadlock
     const items = await tx
@@ -64,11 +63,13 @@ export async function startCheckout(
     if (items.length === 0) return { status: "empty-bag" } as const;
     if (items.some((item) => item.quantity > item.stock)) return { status: "bag-not-ready" } as const;
 
-    await tx
-      .update(products)
-      .set({ stock: sql`${products.stock} - ${bagItems.quantity}` })
-      .from(bagItems)
-      .where(and(eq(bagItems.userId, ownerId), eq(bagItems.productId, products.id)));
+    // The quantities just checked, not the Bag read again: a change in another tab cannot slip in between
+    for (const { productId, quantity } of items) {
+      await tx
+        .update(products)
+        .set({ stock: sql`${products.stock} - ${quantity}` })
+        .where(eq(products.id, productId));
+    }
     const [checkout] = await tx
       .insert(checkouts)
       .values({ userId: ownerId, expiresAt })
@@ -107,7 +108,7 @@ export async function startCheckout(
     });
   } catch (error) {
     // The sweep closes it after its expiry if this fails; the caller still learns why the start failed
-    await closeOpenCheckout(db, held.checkoutId).catch((closeError) =>
+    await closeOpenCheckout(db, { id: held.checkoutId, stripeSessionId: null }).catch((closeError) =>
       console.error(`Could not close Checkout ${held.checkoutId}`, closeError),
     );
     throw error;
@@ -138,13 +139,36 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
   let closed = 0;
   for (const checkout of expired) {
     try {
-      if ((await endSession(payments, checkout)) === "expired" && (await closeOpenCheckout(db, checkout.id))) closed++;
+      if ((await endSession(payments, checkout)) === "expired" && (await closeOpenCheckout(db, checkout))) closed++;
     } catch (error) {
       // One unreachable session must not hold up the others, nor the Checkout whose start runs this sweep
       console.error(`Could not close Checkout ${checkout.id}`, error);
     }
   }
   return closed;
+}
+
+/**
+ * Closes the owner's open Checkout, if any, by the closing rule. For a Guest who signs in: the anonymous user is
+ * deleted with their Checkouts, so its units must go back first (until #27 moves Checkouts to the account instead).
+ */
+export async function closeCheckoutOf(
+  db: Db,
+  payments: Payments,
+  ownerId: string,
+): Promise<"closed" | "none" | "already-paid"> {
+  const checkout = await openCheckoutOf(db, ownerId);
+  if (!checkout) return "none";
+  if ((await endSession(payments, checkout)) === "already-paid") return "already-paid";
+  return (await closeOpenCheckout(db, checkout)) ? "closed" : "none";
+}
+
+async function openCheckoutOf(db: Db, ownerId: string): Promise<OpenCheckout | undefined> {
+  const [checkout] = await db
+    .select({ id: checkouts.id, stripeSessionId: checkouts.stripeSessionId })
+    .from(checkouts)
+    .where(and(eq(checkouts.userId, ownerId), eq(checkouts.state, "open")));
+  return checkout;
 }
 
 /** Makes the Checkout's Stripe session unpayable, unless it was paid first. */
@@ -155,22 +179,29 @@ async function endSession(payments: Payments, checkout: OpenCheckout) {
 }
 
 /**
- * Marks an open Checkout closed and puts its units back in Stock, both or neither. False if it was no longer open, so
- * two closings never return its units twice. Call it only once its session can no longer be paid.
+ * Marks an open Checkout closed and puts its units back in Stock, both or neither. Call it only once the session the
+ * caller saw (`stripeSessionId`) can no longer be paid. False if the Checkout is no longer open, so two closings never
+ * return its units twice, or if a session was recorded since, which nobody has ended.
  */
-async function closeOpenCheckout(db: Db, checkoutId: number): Promise<boolean> {
+async function closeOpenCheckout(db: Db, { id, stripeSessionId }: OpenCheckout): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [closed] = await tx
       .update(checkouts)
       .set({ state: "closed" })
-      .where(and(eq(checkouts.id, checkoutId), eq(checkouts.state, "open")))
+      .where(
+        and(
+          eq(checkouts.id, id),
+          eq(checkouts.state, "open"),
+          stripeSessionId ? eq(checkouts.stripeSessionId, stripeSessionId) : isNull(checkouts.stripeSessionId),
+        ),
+      )
       .returning({ id: checkouts.id });
     if (!closed) return false;
     await tx
       .update(products)
       .set({ stock: sql`${products.stock} + ${checkoutItems.quantity}` })
       .from(checkoutItems)
-      .where(and(eq(checkoutItems.checkoutId, checkoutId), eq(checkoutItems.productId, products.id)));
+      .where(and(eq(checkoutItems.checkoutId, id), eq(checkoutItems.productId, products.id)));
     return true;
   });
 }

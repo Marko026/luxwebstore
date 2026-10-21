@@ -129,7 +129,7 @@ export const checkoutItems = pgTable(
       .references(() => checkouts.id, { onDelete: "cascade" }),
     productId: integer("product_id")
       .notNull()
-      .references(() => products.id, { onDelete: "restrict" }),
+      .references(() => products.id, { onDelete: "cascade" }),
     quantity: integer().notNull(),
     /** Price in euro cents, VAT included, when the Checkout started. */
     unitPriceCents: integer("unit_price_cents").notNull(),
