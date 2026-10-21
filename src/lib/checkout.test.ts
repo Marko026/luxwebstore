@@ -232,22 +232,26 @@ describe("startCheckout's limit", () => {
   it("refuses the next start before anything is held or sent to the payment page", async () => {
     const { owner, slug } = await anOwnerWhoStarted(10);
     const held = lastSession();
+    // A start that went through would take this one's unit out of Stock
+    const added = await aProduct({ stock: 2 });
+    await inBag(owner, added);
     const sessionsBefore = stripe.sessions.length;
 
-    expect(await start(owner)).toEqual({ status: "too-many-attempts" });
+    expect(await start(owner)).toEqual({ status: "too-many-starts" });
 
     expect(stripe.sessions).toHaveLength(sessionsBefore);
+    expect(await catalogueStock(added)).toBe(2);
     // The open Checkout keeps its page and its unit
     expect(held.state).toBe("open");
     expect(await catalogueStock(slug)).toBe(1);
   });
 
-  it("counts every attempt, also one that starts nothing", async () => {
+  it("counts every start, also one that starts nothing", async () => {
     const owner = await aUser();
     for (let i = 0; i < 10; i++) expect(await start(owner)).toEqual({ status: "empty-bag" });
     await inBag(owner, await aProduct());
 
-    expect(await start(owner)).toEqual({ status: "too-many-attempts" });
+    expect(await start(owner)).toEqual({ status: "too-many-starts" });
   });
 
   it("counts each owner apart", async () => {

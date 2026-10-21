@@ -25,8 +25,8 @@ export type StartCheckoutResult =
   | { status: "bag-not-ready"; bag: Bag }
   /** The owner's open Checkout turned out paid on Stripe, so it became an Order and no new one started. */
   | { status: "earlier-checkout-paid" }
-  /** The owner started too many Checkouts lately; nothing changed. */
-  | { status: "too-many-attempts" };
+  /** The owner tried to start too many Checkouts lately; this try was counted, nothing else changed. */
+  | { status: "too-many-starts" };
 
 type OpenCheckout = { id: number; stripeSessionId: string | null };
 
@@ -69,7 +69,7 @@ export async function startCheckout(
   urls: CheckoutUrls,
 ): Promise<StartCheckoutResult> {
   if (!(await consumeRateLimit(db, `checkout-start:${ownerId}`, checkoutStartsPerOwner))) {
-    return { status: "too-many-attempts" };
+    return { status: "too-many-starts" };
   }
   await expireCheckouts(db, payments, new Date());
 
