@@ -93,8 +93,8 @@ export function BagDrawer() {
                         <div role="group" aria-label={`Quantity of ${item.name}`} className="-ml-3 flex items-center">
                           <button
                             type="button"
-                            onClick={() => setQuantity(item.slug, Math.min(item.quantity - 1, item.stock))}
-                            disabled={pending || soldOut || item.quantity <= 1}
+                            onClick={() => item.oneLess && setQuantity(item.slug, item.oneLess)}
+                            disabled={pending || item.oneLess === null}
                             aria-label={`One less ${item.name}`}
                             className="grid size-10 place-items-center text-base disabled:opacity-30"
                           >
@@ -105,8 +105,8 @@ export function BagDrawer() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => setQuantity(item.slug, item.quantity + 1)}
-                            disabled={pending || item.quantity >= item.stock}
+                            onClick={() => item.oneMore && setQuantity(item.slug, item.oneMore)}
+                            disabled={pending || item.oneMore === null}
                             aria-label={`One more ${item.name}`}
                             className="grid size-10 place-items-center text-base disabled:opacity-30"
                           >

@@ -235,6 +235,38 @@ describe("getBag", () => {
     expect(bag.items).toEqual([expect.objectContaining({ slug, quantity: 4, stock: 2, stockStatus: "short" })]);
   });
 
+  it("offers one more and one less unit, within 1 and the Stock", async () => {
+    const owner = await aUser();
+    const single = await aProduct({ stock: 5 });
+    const middle = await aProduct({ stock: 5 });
+    const atStock = await aProduct({ stock: 2 });
+    await addToBag(db, owner, single);
+    for (let i = 0; i < 3; i++) await addToBag(db, owner, middle);
+    for (let i = 0; i < 2; i++) await addToBag(db, owner, atStock);
+
+    expect((await getBag(db, owner)).items).toEqual([
+      expect.objectContaining({ slug: single, quantity: 1, oneLess: null, oneMore: 2 }),
+      expect.objectContaining({ slug: middle, quantity: 3, oneLess: 2, oneMore: 4 }),
+      expect.objectContaining({ slug: atStock, quantity: 2, oneLess: 1, oneMore: null }),
+    ]);
+  });
+
+  it("lowers a short Bag item straight to the Stock, and a sold-out one not at all", async () => {
+    const owner = await aUser();
+    const short = await aProduct({ stock: 5 });
+    const soldOut = await aProduct({ stock: 5 });
+    for (let i = 0; i < 4; i++) await addToBag(db, owner, short);
+    for (let i = 0; i < 3; i++) await addToBag(db, owner, soldOut);
+
+    await setStock(short, 2);
+    await setStock(soldOut, 0);
+
+    expect((await getBag(db, owner)).items).toEqual([
+      expect.objectContaining({ slug: short, quantity: 4, oneLess: 2, oneMore: null }),
+      expect.objectContaining({ slug: soldOut, quantity: 3, oneLess: null, oneMore: null }),
+    ]);
+  });
+
   it("drops a Bag item when its product is removed from the catalogue", async () => {
     const owner = await aUser();
     const kept = await aProduct();

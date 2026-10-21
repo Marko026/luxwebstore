@@ -18,6 +18,10 @@ export type BagItem = {
   stock: number;
   quantity: number;
   stockStatus: StockStatus;
+  /** The quantity "one less" sets: straight down to the Stock for a short Bag item; null at 1 or when sold out. */
+  oneLess: number | null;
+  /** The quantity "one more" sets; null once the quantity reaches the Stock. */
+  oneMore: number | null;
 };
 
 /** "short": more units in the Bag than are in Stock ("Only N left"). "sold-out": Stock is 0. */
@@ -26,6 +30,12 @@ export type StockStatus = "in-stock" | "short" | "sold-out";
 function stockStatusOf(quantity: number, stock: number): StockStatus {
   if (stock <= 0) return "sold-out";
   return quantity > stock ? "short" : "in-stock";
+}
+
+// The same 1-to-Stock range `setQuantity` accepts, so the drawer only offers quantities that will be taken
+function quantityStepsOf(quantity: number, stock: number) {
+  const lower = Math.min(quantity - 1, stock);
+  return { oneLess: lower >= 1 ? lower : null, oneMore: quantity < stock ? quantity + 1 : null };
 }
 
 export type Bag = {
@@ -129,6 +139,7 @@ export async function getBag(db: Db, ownerId: string): Promise<Bag> {
     ...row,
     packshot: images[0],
     stockStatus: stockStatusOf(row.quantity, row.stock),
+    ...quantityStepsOf(row.quantity, row.stock),
   }));
   return {
     items,
