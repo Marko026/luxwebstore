@@ -2,7 +2,18 @@
 // Better Auth tables live in auth-schema.ts, generated (not hand-edited) with:
 // npx auth generate --config src/lib/auth.ts --output src/db/auth-schema.ts
 import { relations, sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export type ProductImage = { src: string; alt: string };
@@ -81,6 +92,55 @@ export const rateLimits = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (t) => [index("rate_limits_expires_at_idx").on(t.expiresAt)],
+);
+
+/** "open": its units are out of Stock and it can be paid. "paid": Stripe took the payment. "closed": it can no longer be paid and its units are back in Stock. */
+export const checkoutState = pgEnum("checkout_state", ["open", "paid", "closed"]);
+
+/** One attempt to pay for a Bag (ADR 0004). Rules live in `src/lib/checkout.ts`. */
+export const checkouts = pgTable(
+  "checkouts",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    state: checkoutState().notNull().default("open"),
+    /** Null only while the Stripe session is being created, or if creating it failed. */
+    stripeSessionId: text("stripe_session_id").unique(),
+    /** When it can no longer be paid; it is closed at the first sweep after that. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("checkouts_user_id_idx").on(t.userId),
+    // A Guest or User has at most one open Checkout
+    uniqueIndex("checkouts_one_open_per_user_idx").on(t.userId).where(sql`${t.state} = 'open'`),
+    index("checkouts_open_expires_at_idx").on(t.expiresAt).where(sql`${t.state} = 'open'`),
+  ],
+);
+
+/** One product of a Checkout, with its price and name fixed when the Checkout started. */
+export const checkoutItems = pgTable(
+  "checkout_items",
+  {
+    checkoutId: integer("checkout_id")
+      .notNull()
+      .references(() => checkouts.id, { onDelete: "cascade" }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    quantity: integer().notNull(),
+    /** Price in euro cents, VAT included, when the Checkout started. */
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    productName: text("product_name").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.checkoutId, t.productId] }),
+    index("checkout_items_product_id_idx").on(t.productId),
+    check("checkout_items_quantity_check", sql`${t.quantity} >= 1`),
+    check("checkout_items_unit_price_cents_check", sql`${t.unitPriceCents} >= 0`),
+  ],
 );
 
 export const categoriesRelations = relations(categories, ({ many }) => ({

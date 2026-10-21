@@ -25,7 +25,8 @@
     "drizzle-orm": "^0.45.4",
     "next": "16.4.1",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "stripe": "^23.0.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.10",

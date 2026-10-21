@@ -8,8 +8,8 @@ import { getBagAction, type OwnedBag } from "@/lib/bag-actions";
 type BagContextValue = {
   /** The Bag of whoever has a session, Guest or User; empty before a Guest's first "Add to bag". */
   bag: Bag;
-  /** Shows a Bag a server function just returned. */
-  setBag: (owned: OwnedBag) => void;
+  /** Shows a Bag a server function just returned; false if it belongs to someone no longer signed in. */
+  setBag: (owned: OwnedBag) => boolean;
   /** Whether the Bag drawer is open. */
   open: boolean;
   /** Opens the Bag drawer and reloads the Bag, so its prices and Stock flags are current. */
@@ -60,9 +60,10 @@ export function BagProvider({ children }: { children: ReactNode }) {
 
   const setBag = ({ ownerId, bag }: OwnedBag) => {
     // Started for a user who is no longer the signed-in one, or (server and client disagreeing) for someone else
-    if (userId !== currentUserId.current || (userId && ownerId !== userId)) return;
+    if (userId !== currentUserId.current || (userId && ownerId !== userId)) return false;
     version.current += 1;
     setShownBag({ ownerId, bag, beforeSession: !userId });
+    return true;
   };
 
   const openBag = () => {
