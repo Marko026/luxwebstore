@@ -5,9 +5,14 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useBag } from "@/components/bag/bag-provider";
 import { Drawer } from "@/components/drawer";
+import { MinusIcon, PlusIcon } from "@/components/home/icons";
 import type { BagItem } from "@/lib/bag";
 import { removeFromBagAction, setQuantityAction, type OwnedBag, type SignedOut } from "@/lib/bag-actions";
 import { formatPrice, productHref } from "@/lib/products";
+
+// A round 48px icon button (design reference §6), outlined with the hairline used around form fields (§7)
+const stepperButton =
+  "grid size-12 place-items-center rounded-full border border-line transition-[border-color,scale] duration-(--t-press) hover:border-ink active:scale-95 disabled:pointer-events-none disabled:opacity-30";
 
 function noteFor(item: BagItem) {
   if (item.stockStatus === "sold-out") return "Sold out";
@@ -18,7 +23,7 @@ function noteFor(item: BagItem) {
 /**
  * The Bag drawer: each Bag item with a − n + stepper and "Remove", the Subtotal, and a disabled Checkout. Opens from the
  * header bag icon and after a successful "Add to bag". A sold-out or short Bag item stays and is flagged; nothing is
- * changed without the shopper doing it. One change at a time: the controls wait while one is on its way.
+ * changed without the Guest or User doing it. One change at a time: the controls wait while one is on its way.
  */
 export function BagDrawer() {
   const { bag, setBag, open, closeBag } = useBag();
@@ -43,12 +48,10 @@ export function BagDrawer() {
   const setQuantity = (slug: string, quantity: number) => runBagChange(() => setQuantityAction(slug, quantity));
   const remove = (slug: string) => runBagChange(() => removeFromBagAction(slug));
 
-  const label = "text-xs font-bold tracking-[-0.05em] uppercase";
-
   return (
     <Drawer open={open} onClose={closeBag} id="bag" label="Bag" closeLabel="Close bag">
       <div className="flex h-full flex-col">
-        <h2 className={`flex h-20 shrink-0 items-center px-8 sm:pl-16 ${label}`}>
+        <h2 className="flex h-20 shrink-0 items-center px-8 uppercase ui-label sm:pl-16">
           Bag{bag.units > 0 && ` (${bag.units})`}
         </h2>
 
@@ -87,27 +90,25 @@ export function BagDrawer() {
                       </div>
                       {note && <p className="mt-1 font-bold">{note}</p>}
                       <div className="mt-auto flex items-center justify-between pt-3">
-                        <div role="group" aria-label={`Quantity of ${item.name}`} className="-ml-3 flex items-center">
+                        <div role="group" aria-label={`Quantity of ${item.name}`} className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => item.oneLess && setQuantity(item.slug, item.oneLess)}
                             disabled={pending || item.oneLess === null}
                             aria-label={`One less ${item.name}`}
-                            className="grid size-10 place-items-center text-base disabled:opacity-30"
+                            className={stepperButton}
                           >
-                            −
+                            <MinusIcon />
                           </button>
-                          <span className="min-w-4 text-center">
-                            {item.quantity}
-                          </span>
+                          <span className="min-w-4 text-center">{item.quantity}</span>
                           <button
                             type="button"
                             onClick={() => item.oneMore && setQuantity(item.slug, item.oneMore)}
                             disabled={pending || item.oneMore === null}
                             aria-label={`One more ${item.name}`}
-                            className="grid size-10 place-items-center text-base disabled:opacity-30"
+                            className={stepperButton}
                           >
-                            +
+                            <PlusIcon />
                           </button>
                         </div>
                         <button

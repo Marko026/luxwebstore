@@ -138,7 +138,7 @@ export async function getBag(db: Db, ownerId: string): Promise<Bag> {
   return {
     items,
     units: items.reduce((sum, item) => sum + item.quantity, 0),
-    // A short Bag item still counts at its quantity: it is flagged, and the shopper lowers it themselves
+    // A short Bag item still counts at its quantity: it is flagged, and the Guest or User lowers it themselves
     subtotalCents: items
       .filter((item) => item.stockStatus !== "sold-out")
       .reduce((sum, item) => sum + item.priceCents * item.quantity, 0),

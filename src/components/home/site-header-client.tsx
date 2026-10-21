@@ -122,8 +122,6 @@ export function SiteHeaderClient({
     setAuthOpen(true);
   };
 
-  const label = "text-xs font-bold tracking-[-0.05em]";
-
   return (
     <>
       <header
@@ -134,7 +132,7 @@ export function SiteHeaderClient({
         <div className="mx-auto grid h-16 max-w-page grid-cols-[1fr_auto_1fr] items-center px-gutter lg:h-18 xl:px-0">
           {/* desktop: the main sections; Bags and Services open a panel. Below lg they live in the drawer */}
           <nav ref={desktopNav} aria-label="Main" className="hidden lg:block">
-            <ul className={`flex items-center gap-8 ${label}`}>
+            <ul className="flex items-center gap-8 ui-label">
               <li>
                 <Link href="/new-arrivals" className="link-reveal">
                   New Arrivals
@@ -179,7 +177,7 @@ export function SiteHeaderClient({
                   </ul>
                   {p.id === "bags" && newArrivals.length > 0 && (
                     <div className="w-sm">
-                      <Link href="/new-arrivals" onClick={() => setPanel(null)} className={`link-wipe ${label}`}>
+                      <Link href="/new-arrivals" onClick={() => setPanel(null)} className="link-wipe ui-label">
                         New Arrivals
                       </Link>
                       <ul className="mt-4 grid grid-cols-2">
@@ -199,7 +197,7 @@ export function SiteHeaderClient({
             <Wordmark className="h-4 w-30 lg:h-5 lg:w-34" />
           </Link>
           <nav aria-label="Account" className="col-start-3 row-start-1 flex items-center justify-end gap-3 lg:gap-5">
-            <a href="#contact" className={`group mr-1 hidden items-center gap-2 lg:flex ${label}`}>
+            <a href="#contact" className="group mr-1 hidden items-center gap-2 lg:flex ui-label">
               <PlusIcon /> <span className="link-wipe">Contact Us</span>
             </a>
             <button
@@ -207,13 +205,13 @@ export function SiteHeaderClient({
               onClick={openBag}
               aria-haspopup="dialog"
               aria-label={units > 0 ? `Shopping bag (${units})` : "Shopping bag"}
-              className={`flex items-center gap-1 p-1 transition-opacity duration-(--t-ui) ease-lux hover:opacity-60 ${label}`}
+              className="flex items-center gap-1 p-1 transition-opacity duration-(--t-ui) ease-lux hover:opacity-60 ui-label"
             >
               <BagIcon />
               {units > 0 && <span aria-hidden>{units}</span>}
             </button>
             {user ? (
-              <span className={`hidden items-center gap-3 sm:flex ${label}`}>
+              <span className="hidden items-center gap-3 sm:flex ui-label">
                 <span className="max-w-32 truncate">{user.name}</span>
                 <button type="button" onClick={() => authClient.signOut()} className="link-wipe uppercase">
                   Sign out
@@ -238,7 +236,7 @@ export function SiteHeaderClient({
               onClick={() => setOpen(true)}
               aria-expanded={open}
               aria-controls="site-menu"
-              className={`flex items-center gap-2 p-1 uppercase transition-opacity duration-(--t-ui) ease-lux hover:opacity-60 lg:hidden ${label}`}
+              className="flex items-center gap-2 p-1 uppercase transition-opacity duration-(--t-ui) ease-lux hover:opacity-60 lg:hidden ui-label"
             >
               <MenuIcon />
               <span className="hidden sm:inline">Menu</span>
@@ -309,7 +307,7 @@ export function SiteHeaderClient({
             <button
               type="button"
               onClick={() => setLevel(null)}
-              className={`group flex items-center gap-2 uppercase ${label}`}
+              className="group flex items-center gap-2 uppercase ui-label"
             >
               <ChevronIcon className="rotate-180" />
               <span className="link-wipe">Back</span>
