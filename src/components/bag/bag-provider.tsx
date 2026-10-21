@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, use, useEffect, useState, type ReactNode } from "react";
+import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
 import { authClient } from "@/lib/auth-client";
 import { getBagAction } from "@/lib/bag-actions";
 
@@ -20,14 +20,20 @@ export function BagProvider({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
   const userId = session?.user.id;
   const [bag, setBag] = useState<{ ownerId: string; units: number } | null>(null);
+  // Counts local writes, so a load that started before an add can't overwrite the newer count when it lands later
+  const writes = useRef(0);
+  // The signed-in user now; an add that resolves after the user changed holds an older setUnits and is ignored
+  const currentUserId = useRef(userId);
 
   useEffect(() => {
+    currentUserId.current = userId;
     if (!userId) return;
     let current = true;
+    const writesAtStart = writes.current;
     // On failure the count keeps what it showed; it reloads when the user changes or after the next add
     getBagAction()
       .then((b) => {
-        if (current) setBag({ ownerId: userId, units: b.units });
+        if (current && writes.current === writesAtStart) setBag({ ownerId: userId, units: b.units });
       })
       .catch((error) => console.error("Could not load the Bag", error));
     return () => {
@@ -36,7 +42,9 @@ export function BagProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   const setUnits = (units: number) => {
-    if (userId) setBag({ ownerId: userId, units });
+    if (!userId || userId !== currentUserId.current) return;
+    writes.current += 1;
+    setBag({ ownerId: userId, units });
   };
 
   const units = userId && bag?.ownerId === userId ? bag.units : 0;
