@@ -37,7 +37,7 @@ What a Bag costs together at current catalogue prices, VAT included. A sold-out 
 _Avoid_: Order total, grand total
 
 **Checkout**:
-One attempt to pay for a Bag. It starts only when every Bag item is in Stock at its full quantity, takes those units out of Stock and fixes their prices. If it is not paid within 30 minutes, the units go back to Stock. A Guest or User has at most one open Checkout: starting another closes the earlier one and returns its units. Going back from paying closes it at once.
+One attempt to pay for a Bag. It starts only when every Bag item is in Stock at its full quantity, takes those units out of Stock and fixes their prices. It can be paid for 30 minutes; after that it can no longer be paid and its units go back to Stock, though not necessarily at that same moment. A Guest or User has at most one open Checkout: starting another closes the earlier one and returns its units. Going back from paying closes it at once.
 _Avoid_: Payment session, pending order
 
 **Order**:
