@@ -22,8 +22,11 @@ export function BagProvider({ children }: { children: ReactNode }) {
   const [bag, setBag] = useState<{ ownerId: string; units: number } | null>(null);
   // Counts local writes, so a load that started before an add can't overwrite the newer count when it lands later
   const writes = useRef(0);
+  // The signed-in user now; an add that resolves after the user changed holds an older setUnits and is ignored
+  const currentUserId = useRef(userId);
 
   useEffect(() => {
+    currentUserId.current = userId;
     if (!userId) return;
     let current = true;
     const writesAtStart = writes.current;
@@ -39,7 +42,7 @@ export function BagProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   const setUnits = (units: number) => {
-    if (!userId) return;
+    if (!userId || userId !== currentUserId.current) return;
     writes.current += 1;
     setBag({ ownerId: userId, units });
   };
