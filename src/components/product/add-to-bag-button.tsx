@@ -15,6 +15,8 @@ function messageFor(result: AddResult) {
       return "Just sold out";
     case "unknown-product":
       return "This product is no longer available";
+    case "too-many-guests":
+      return "Too many requests. Please try again later.";
     default:
       return "";
   }
@@ -44,9 +46,11 @@ export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boole
         setMessage("Something went wrong. Please try again.");
         return;
       }
+      setMessage(messageFor(result));
+      // A Guest's first add that went nowhere created no Guest, so there is no Bag and no session to pick up
+      if (!("bag" in result)) return;
       // Shown at once, even for a Guest the client doesn't know is signed in yet: the result names the Bag's owner
       setBag(result);
-      setMessage(messageFor(result));
       // Only a unit that went in opens the drawer; "Only N available" and "Just sold out" stay on the page
       if (result.status === "added") openBag();
       // A first add signed a Guest in on the server; once the client knows that session, the Bag loads for it

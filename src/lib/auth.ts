@@ -8,6 +8,8 @@ import { mergeBags } from "@/lib/bag";
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg" }),
   emailAndPassword: { enabled: true },
+  // Guests are signed in only by "Add to bag", behind its limit (ADR 0002); the HTTP route would bypass it
+  disabledPaths: ["/sign-in/anonymous"],
   plugins: [
     // A Guest's Bag belongs to an anonymous user, created on their first "Add to bag" (ADR 0001)
     anonymous({
