@@ -316,6 +316,19 @@ export async function expireCheckout(db: Db, payments: Payments, sessionId: stri
   if (checkout) await closeOrComplete(db, payments, checkout);
 }
 
+/**
+ * Stripe's back link: closes the owner's open Checkout of this session by the closing rule, so its units come back at
+ * once; one that turns out paid becomes an Order instead. Nothing happens for another owner's Checkout, or one that is
+ * no longer open.
+ */
+export async function cancelCheckout(db: Db, payments: Payments, ownerId: string, sessionId: string): Promise<void> {
+  const [checkout] = await db
+    .select({ id: checkouts.id, stripeSessionId: checkouts.stripeSessionId })
+    .from(checkouts)
+    .where(and(eq(checkouts.stripeSessionId, sessionId), eq(checkouts.userId, ownerId), eq(checkouts.state, "open")));
+  if (checkout) await closeOrComplete(db, payments, checkout);
+}
+
 /** The Order of the Checkout with this Stripe session, only if it belongs to `ownerId`. */
 export async function getOrder(db: Db, ownerId: string, sessionId: string): Promise<Order | undefined> {
   return findOrder(db, and(eq(checkouts.stripeSessionId, sessionId), eq(orders.userId, ownerId))!);

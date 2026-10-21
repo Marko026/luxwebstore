@@ -4,7 +4,15 @@ import { bagItems, categories, checkouts, orders, products, user } from "@/db/sc
 import { createTestDb } from "@/test/db";
 import { anAddress, fakePayments } from "@/test/fake-payments";
 import { addToBag, deleteStaleGuests, getBag, setQuantity } from "./bag";
-import { completeCheckout, expireCheckout, expireCheckouts, getOrder, moveCheckouts, startCheckout } from "./checkout";
+import {
+  cancelCheckout,
+  completeCheckout,
+  expireCheckout,
+  expireCheckouts,
+  getOrder,
+  moveCheckouts,
+  startCheckout,
+} from "./checkout";
 
 let db: Awaited<ReturnType<typeof createTestDb>>;
 let categoryId: number;
@@ -45,13 +53,7 @@ async function inBag(owner: string, slug: string, quantity = 1) {
   if (quantity > 1) await setQuantity(db, owner, slug, quantity);
 }
 
-/** Stock as the owner's Bag shows it. */
-async function stockInBag(owner: string, slug: string) {
-  const item = (await getBag(db, owner)).items.find((i) => i.slug === slug);
-  return item?.stock;
-}
-
-/** Stock as the catalogue shows it, for a product no longer in any Bag. */
+/** Stock as the catalogue, and every Bag but the holder's, shows it. */
 async function catalogueStock(slug: string) {
   const [product] = await db.select({ stock: products.stock }).from(products).where(eq(products.slug, slug));
   return product?.stock;
@@ -85,8 +87,8 @@ describe("startCheckout", () => {
     const minutesLeft = (lastSession().expiresAt.getTime() - Date.now()) / MINUTE;
     expect(minutesLeft).toBeGreaterThan(29);
     expect(minutesLeft).toBeLessThanOrEqual(30);
-    expect(await stockInBag(owner, tote)).toBe(1);
-    expect(await stockInBag(owner, clutch)).toBe(0);
+    expect(await catalogueStock(tote)).toBe(1);
+    expect(await catalogueStock(clutch)).toBe(0);
   });
 
   it("leaves a Guest's email for the payment page to ask", async () => {
@@ -132,8 +134,8 @@ describe("startCheckout", () => {
       },
     });
     expect(stripe.sessions).toHaveLength(sessionsBefore);
-    expect(await stockInBag(owner, ready)).toBe(3);
-    expect(await stockInBag(owner, flagged)).toBe(stockLeft);
+    expect(await catalogueStock(ready)).toBe(3);
+    expect(await catalogueStock(flagged)).toBe(stockLeft);
   });
 
   it("closes the owner's earlier Checkout: its page stops taking payment and its units come back", async () => {
@@ -147,7 +149,7 @@ describe("startCheckout", () => {
 
     expect(first.state).toBe("expired");
     expect(lastSession()).not.toBe(first);
-    expect(await stockInBag(owner, slug)).toBe(1);
+    expect(await catalogueStock(slug)).toBe(1);
   });
 
   it("lets the owner start again with the units their earlier Checkout held", async () => {
@@ -158,7 +160,7 @@ describe("startCheckout", () => {
 
     expect(await start(owner)).toMatchObject({ status: "started" });
 
-    expect(await stockInBag(owner, slug)).toBe(0);
+    expect(await catalogueStock(slug)).toBe(0);
   });
 
   it("completes an earlier Checkout that was already paid: it becomes an Order, and nothing new starts", async () => {
@@ -192,7 +194,7 @@ describe("startCheckout", () => {
     const [fasterSession, slowerSession] = stripe.sessions.slice(-2);
     expect(fasterSession!.state).toBe("open");
     expect(slowerSession!.state).toBe("expired");
-    expect(await stockInBag(owner, slug)).toBe(1);
+    expect(await catalogueStock(slug)).toBe(1);
   });
 
   it("puts the units back when the payment page cannot be created", async () => {
@@ -203,9 +205,138 @@ describe("startCheckout", () => {
 
     await expect(start(owner)).rejects.toThrow();
 
-    expect(await stockInBag(owner, slug)).toBe(2);
+    expect(await catalogueStock(slug)).toBe(2);
     // Nothing is left open to block the next try
     expect(await start(owner)).toMatchObject({ status: "started" });
+  });
+});
+
+describe("the owner's own open Checkout", () => {
+  it("leaves the units it holds available in the owner's Bag only: another Bag sees them gone", async () => {
+    const owner = await aUser();
+    const other = await aUser();
+    const slug = await aProduct({ stock: 1 });
+    await inBag(owner, slug);
+    await inBag(other, slug);
+    await start(owner);
+
+    expect((await getBag(db, owner)).items).toEqual([
+      expect.objectContaining({ slug, stock: 1, stockStatus: "in-stock", oneMore: null }),
+    ]);
+    expect((await getBag(db, other)).items).toEqual([
+      expect.objectContaining({ slug, stock: 0, stockStatus: "sold-out" }),
+    ]);
+    expect(await catalogueStock(slug)).toBe(0);
+  });
+
+  it("lets the owner lower a Bag item it holds, as the drawer offers", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug, 2);
+    await start(owner);
+    const [item] = (await getBag(db, owner)).items;
+    expect(item).toMatchObject({ stockStatus: "in-stock", oneLess: 1, oneMore: null });
+
+    expect(await setQuantity(db, owner, slug, item!.oneLess!)).toEqual({ status: "updated", quantity: 1 });
+    expect(await setQuantity(db, owner, slug, 3)).toEqual({ status: "above-stock", available: 2 });
+  });
+
+  it("lets the owner add the units it holds again, and no more", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    await start(owner);
+
+    expect(await addToBag(db, owner, slug)).toEqual({ status: "added", quantity: 2 });
+    expect(await addToBag(db, owner, slug)).toEqual({ status: "capped", available: 2 });
+    expect(await addToBag(db, await aUser(), slug)).toEqual({ status: "added", quantity: 1 });
+  });
+
+  it("does not block starting again on the last unit: the old one closes, and one hold is left", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 1 });
+    await inBag(owner, slug);
+    await start(owner);
+    const first = lastSession();
+
+    expect(await start(owner)).toEqual({ status: "started", url: lastSession().url });
+
+    expect(first.state).toBe("expired");
+    expect(lastSession().state).toBe("open");
+    expect(await catalogueStock(slug)).toBe(0);
+    // Leaving the new one gives back the one unit: no other Checkout of the owner still holds it
+    await cancelCheckout(db, stripe.payments, owner, lastSession().id);
+    expect(await catalogueStock(slug)).toBe(1);
+  });
+});
+
+describe("cancelCheckout", () => {
+  const cancel = (owner: string, sessionId: string) => cancelCheckout(db, stripe.payments, owner, sessionId);
+
+  it("closes the owner's open Checkout at once: its page stops taking payment and its units come back", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug, 2);
+    await start(owner);
+    const session = lastSession();
+
+    await cancel(owner, session.id);
+
+    expect(session.state).toBe("expired");
+    expect(await catalogueStock(slug)).toBe(2);
+    expect(await bagOf(owner)).toEqual([{ slug, quantity: 2 }]);
+    // Closed: the next start has no earlier Checkout to end
+    expect(await start(owner)).toMatchObject({ status: "started" });
+    expect(lastSession()).not.toBe(session);
+  });
+
+  it("changes nothing for another owner's Checkout", async () => {
+    const owner = await aUser();
+    const other = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    await start(owner);
+    const session = lastSession();
+
+    await cancel(other, session.id);
+
+    expect(session.state).toBe("open");
+    expect(await catalogueStock(slug)).toBe(1);
+  });
+
+  it("changes nothing for a paid Checkout", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    await start(owner);
+    const session = lastSession();
+    stripe.markPaid(session.id);
+    await complete(session.id);
+
+    await cancel(owner, session.id);
+
+    expect(session.state).toBe("paid");
+    expect(await getOrder(db, owner, session.id)).toBeDefined();
+    expect(await catalogueStock(slug)).toBe(1);
+  });
+
+  it("changes nothing for a closed Checkout: its units come back once, and the newer one keeps its hold", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ stock: 2 });
+    await inBag(owner, slug);
+    await start(owner);
+    const closed = lastSession();
+    await start(owner);
+    const newer = lastSession();
+
+    await cancel(owner, closed.id);
+
+    expect(newer.state).toBe("open");
+    expect(await catalogueStock(slug)).toBe(1);
+  });
+
+  it("knows no session that is not a Checkout's", async () => {
+    await expect(cancel(await aUser(), "cs_test_unknown")).resolves.toBeUndefined();
   });
 });
 
@@ -244,7 +375,7 @@ describe("completeCheckout", () => {
     ]);
     // Already out of Stock since the start
     expect(await catalogueStock(tote)).toBe(1);
-    expect(await stockInBag(owner, clutch)).toBe(2);
+    expect(await catalogueStock(clutch)).toBe(2);
   });
 
   it("keeps the email a Guest gave on the payment page", async () => {
@@ -286,7 +417,7 @@ describe("completeCheckout", () => {
 
     expect(await getOrder(db, owner, session.id)).toBeUndefined();
     expect(await bagOf(owner)).toEqual([{ slug, quantity: 1 }]);
-    expect(await stockInBag(owner, slug)).toBe(2);
+    expect(await catalogueStock(slug)).toBe(2);
   });
 
   it("makes the Order of a Checkout already marked paid, as moving a Guest's Checkouts can leave one", async () => {
@@ -385,7 +516,7 @@ describe("expireCheckout", () => {
 
     await expireCheckout(db, stripe.payments, lastSession().id);
 
-    expect(await stockInBag(owner, slug)).toBe(2);
+    expect(await catalogueStock(slug)).toBe(2);
     // Closed: the owner's next start finds no open Checkout to end
     expect(await start(owner)).toMatchObject({ status: "started" });
   });
@@ -430,7 +561,7 @@ describe("expireCheckouts", () => {
 
     expect(lateSession.state).toBe("expired");
     expect(onTimeSession.state).toBe("open");
-    expect(await stockInBag(onTime, slug)).toBe(2);
+    expect(await catalogueStock(slug)).toBe(2);
     // Already closed: a second sweep finds nothing
     expect(await expireCheckouts(db, stripe.payments, new Date())).toBe(0);
   });
@@ -469,11 +600,11 @@ describe("moveCheckouts", () => {
 
     expect(guestSession.state).toBe("open");
     await inBag(account, slug);
-    expect(await stockInBag(account, slug)).toBe(1);
+    expect(await catalogueStock(slug)).toBe(1);
     await start(account);
     // The moved Checkout was the account's: closed, its unit back, then held again by the new one
     expect(guestSession.state).toBe("expired");
-    expect(await stockInBag(account, slug)).toBe(1);
+    expect(await catalogueStock(slug)).toBe(1);
   });
 
   it("closes the older of two open Checkouts, keeping the newer one", async () => {
@@ -493,9 +624,8 @@ describe("moveCheckouts", () => {
 
     expect(olderSession.state).toBe("expired");
     expect(newerSession.state).toBe("open");
-    expect(await stockInBag(account, accountSlug)).toBe(2);
-    await inBag(account, guestSlug);
-    expect(await stockInBag(account, guestSlug)).toBe(1);
+    expect(await catalogueStock(accountSlug)).toBe(2);
+    expect(await catalogueStock(guestSlug)).toBe(1);
   });
 
   it("keeps both when the older one was already paid: its units stay bought, the newer one stays open", async () => {
@@ -523,7 +653,7 @@ describe("moveCheckouts", () => {
     expect(await bagOf(account)).toEqual([]);
     expect(await catalogueStock(accountSlug)).toBe(1);
     await inBag(account, guestSlug);
-    expect(await stockInBag(account, guestSlug)).toBe(1);
+    expect(await catalogueStock(guestSlug)).toBe(1);
     // The newer one is the account's one open Checkout: its next start ends it, and the paid one is no longer open
     expect(await start(account)).toMatchObject({ status: "started" });
     expect(newerSession.state).toBe("expired");

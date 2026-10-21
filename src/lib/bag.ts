@@ -1,9 +1,10 @@
 // The Bag: all Bag rules live here. Every function takes the database as a parameter, so tests pass their own.
-// Stock is read straight from the products table, never through the cached catalogue reads.
+// Stock is read straight from the products table, never through the cached catalogue reads. A Bag counts the units its
+// owner's own open Checkout holds as theirs to take (`stockFor`), so leaving a payment page never blocks its owner.
 import { and, asc, eq, gt, gte, inArray, lt, notExists, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as schema from "@/db/schema";
-import { bagItems, products, type ProductImage } from "@/db/schema";
+import { bagItems, checkoutItems, checkouts, products, type ProductImage } from "@/db/schema";
 
 /** The app's Neon database or a test database: anything Postgres with the project's schema. */
 export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
@@ -14,6 +15,7 @@ export type BagItem = {
   packshot: ProductImage | undefined;
   /** Current catalogue price in euro cents, VAT included. */
   priceCents: number;
+  /** The Stock plus the units the owner's own open Checkout holds: what this owner can take. */
   stock: number;
   quantity: number;
   stockStatus: StockStatus;
@@ -77,14 +79,17 @@ export async function setQuantity(
     .update(bagItems)
     .set({ quantity, updatedAt: sql`now()` })
     .where(
-      and(eq(bagItems.userId, ownerId), inArray(bagItems.productId, productIdBySlug(db, productSlug, quantity))),
+      and(
+        eq(bagItems.userId, ownerId),
+        inArray(bagItems.productId, productIdBySlug(db, productSlug, { ownerId, quantity })),
+      ),
     )
     .returning({ quantity: bagItems.quantity });
   if (row) return { status: "updated", quantity: row.quantity };
 
   // Nothing was written; read the Bag item's Stock only to say why
   const [item] = await db
-    .select({ stock: products.stock })
+    .select({ stock: stockFor(db, ownerId) })
     .from(bagItems)
     .innerJoin(products, eq(products.id, bagItems.productId))
     .where(and(eq(bagItems.userId, ownerId), eq(products.slug, productSlug)));
@@ -106,12 +111,31 @@ export async function removeFromBag(db: Db, ownerId: string, productSlug: string
   `);
 }
 
-/** The product's id, as a subquery; with `minStock`, only while its Stock is at least that. */
-function productIdBySlug(db: Db, productSlug: string, minStock?: number) {
+/** The product's id, as a subquery; with `takeable`, only while the owner can take that many (`stockFor`). */
+function productIdBySlug(db: Db, productSlug: string, takeable?: { ownerId: string; quantity: number }) {
   return db
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.slug, productSlug), minStock === undefined ? undefined : gte(products.stock, minStock)));
+    .where(
+      and(
+        eq(products.slug, productSlug),
+        takeable && gte(stockFor(db, takeable.ownerId), takeable.quantity),
+      ),
+    );
+}
+
+/**
+ * How many units of a product `ownerId` can take: its Stock plus the units their own open Checkout holds. Those units
+ * are theirs until the Checkout closes, and starting a new one closes it first (ADR 0004), so their own hold never
+ * makes their Bag item sold out or short. Everyone else sees only the Stock. For a query that reads `products`.
+ */
+function stockFor(db: Db, ownerId: string) {
+  const ownHold = db
+    .select({ quantity: sql`sum(${checkoutItems.quantity})` })
+    .from(checkoutItems)
+    .innerJoin(checkouts, eq(checkouts.id, checkoutItems.checkoutId))
+    .where(and(eq(checkouts.userId, ownerId), eq(checkouts.state, "open"), eq(checkoutItems.productId, products.id)));
+  return sql<number>`(${products.stock} + coalesce((${ownHold}), 0))::int`;
 }
 
 export async function getBag(db: Db, ownerId: string): Promise<Bag> {
@@ -121,7 +145,7 @@ export async function getBag(db: Db, ownerId: string): Promise<Bag> {
       name: products.name,
       images: products.images,
       priceCents: products.priceCents,
-      stock: products.stock,
+      stock: stockFor(db, ownerId),
       quantity: bagItems.quantity,
     })
     .from(bagItems)
@@ -159,25 +183,29 @@ export async function addToBag(db: Db, ownerId: string, productSlug: string): Pr
           updatedAt: sql<Date>`now()`.as("updated_at"),
         })
         .from(products)
-        .where(and(eq(products.slug, productSlug), gt(products.stock, 0))),
+        .where(and(eq(products.slug, productSlug), gt(stockFor(db, ownerId), 0))),
     )
     .onConflictDoUpdate({
       target: [bagItems.userId, bagItems.productId],
       set: { quantity: sql`${bagItems.quantity} + 1`, updatedAt: sql`now()` },
-      setWhere: sql`${bagItems.quantity} < (select ${products.stock} from ${products} where ${products.id} = ${bagItems.productId})`,
+      setWhere: sql`${bagItems.quantity} < (select ${stockFor(db, ownerId)} from ${products} where ${products.id} = ${bagItems.productId})`,
     })
     .returning({ quantity: bagItems.quantity });
   if (row) return { status: "added", quantity: row.quantity };
 
   // Nothing was written; read the Stock only to say why (no write depends on this read).
-  const stock = await stockOf(db, productSlug);
+  const stock = await stockOf(db, productSlug, ownerId);
   if (stock === undefined) return { status: "unknown-product" };
   if (stock === 0) return { status: "sold-out" };
   return { status: "capped", available: stock };
 }
 
-async function stockOf(db: Db, productSlug: string): Promise<number | undefined> {
-  const [product] = await db.select({ stock: products.stock }).from(products).where(eq(products.slug, productSlug));
+/** The product's Stock; with `ownerId`, as that owner can take it (`stockFor`). */
+async function stockOf(db: Db, productSlug: string, ownerId?: string): Promise<number | undefined> {
+  const [product] = await db
+    .select({ stock: ownerId ? stockFor(db, ownerId) : products.stock })
+    .from(products)
+    .where(eq(products.slug, productSlug));
   return product?.stock;
 }
 

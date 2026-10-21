@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, use, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, use, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { authClient } from "@/lib/auth-client";
 import type { Bag } from "@/lib/bag";
 import { getBagAction, type OwnedBag } from "@/lib/bag-actions";
@@ -24,6 +24,14 @@ const noBag: Bag = { items: [], units: 0, subtotalCents: 0 };
 
 const BagContext = createContext<BagContextValue | null>(null);
 
+// Stripe's back link lands on `/?bag=open` (the Checkout cancel route). Read once per page load, so the drawer opens on
+// arrival only, not again after the flag is dropped from the address.
+let arrivedToOpenBag: boolean | undefined;
+const arrivedToOpenBagNow = () =>
+  (arrivedToOpenBag ??= new URLSearchParams(window.location.search).get("bag") === "open");
+// The address is read once, so there is nothing to subscribe to
+const noSubscription = () => () => {};
+
 /**
  * Shares the Bag and the Bag drawer's open state between the header, "Add to bag" and the drawer. Loads the Bag
  * whenever the signed-in user changes and each time the drawer opens; the Bag is kept with the user it belongs to,
@@ -35,7 +43,11 @@ export function BagProvider({ children }: { children: ReactNode }) {
   // `beforeSession`: written by a Guest's first "Add to bag", which signed them in on the server before the client
   // knows their session. Shown until that session arrives; it then belongs to the user it names.
   const [shownBag, setShownBag] = useState<(OwnedBag & { beforeSession: boolean }) | null>(null);
-  const [open, setOpen] = useState(false);
+  // Closed on the server and while hydrating; open from the first client render after arriving by Stripe's back link
+  const arrivedOpen = useSyncExternalStore(noSubscription, arrivedToOpenBagNow, () => false);
+  // Null until the drawer is first opened or closed here
+  const [openChoice, setOpenChoice] = useState<boolean | null>(null);
+  const open = openChoice ?? arrivedOpen;
   // Bumped by every load, every local write and every change of user. A load is applied only if nothing bumped it
   // while it was in flight, so it never overwrites a newer load, a newer write or the next user's Bag.
   const version = useRef(0);
@@ -60,6 +72,14 @@ export function BagProvider({ children }: { children: ReactNode }) {
     };
   }, [userId]);
 
+  // Drops the flag, so a reload does not open the drawer again. The Bag itself loads with the session, as above.
+  useEffect(() => {
+    if (!arrivedOpen) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("bag");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [arrivedOpen]);
+
   const setBag = ({ ownerId, bag }: OwnedBag) => {
     // Started for a user who is no longer the signed-in one, or (server and client disagreeing) for someone else
     if (userId !== currentUserId.current || (userId && ownerId !== userId)) return false;
@@ -69,7 +89,7 @@ export function BagProvider({ children }: { children: ReactNode }) {
   };
 
   const openBag = () => {
-    setOpen(true);
+    setOpenChoice(true);
     if (userId) load(userId);
   };
 
@@ -80,7 +100,7 @@ export function BagProvider({ children }: { children: ReactNode }) {
   const shown = shownBag && (userId ? shownBag.ownerId === userId : shownBag.beforeSession);
   const bag = shown ? shownBag.bag : noBag;
   return (
-    <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpen(false), reloadBag }}>{children}</BagContext>
+    <BagContext value={{ bag, setBag, open, openBag, closeBag: () => setOpenChoice(false), reloadBag }}>{children}</BagContext>
   );
 }
 
