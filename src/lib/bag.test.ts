@@ -21,6 +21,13 @@ async function aUser() {
   return id;
 }
 
+// A Guest is the anonymous Better Auth user created by their first "Add to bag" (ADR 0001).
+async function aGuest() {
+  const id = `guest-${++seq}`;
+  await db.insert(user).values({ id, name: "Anonymous", email: `${id}@anonymous.invalid`, isAnonymous: true });
+  return id;
+}
+
 async function aProduct({ stock = 5, priceCents = 100_000 } = {}) {
   const slug = `bag-${++seq}`;
   await db.insert(products).values({
@@ -88,6 +95,17 @@ describe("addToBag", () => {
     expect(await addToBag(db, owner, "no-such-bag")).toEqual({ status: "unknown-product" });
 
     expect(await getBag(db, owner)).toMatchObject({ items: [], units: 0 });
+  });
+
+  it("gives a Guest a Bag that works like a User's, Stock cap included", async () => {
+    const guest = await aGuest();
+    const slug = await aProduct({ stock: 2 });
+
+    expect(await addToBag(db, guest, slug)).toEqual({ status: "added", quantity: 1 });
+    expect(await addToBag(db, guest, slug)).toEqual({ status: "added", quantity: 2 });
+    expect(await addToBag(db, guest, slug)).toEqual({ status: "capped", available: 2 });
+
+    expect(await getBag(db, guest)).toMatchObject({ items: [expect.objectContaining({ slug, quantity: 2 })], units: 2 });
   });
 });
 

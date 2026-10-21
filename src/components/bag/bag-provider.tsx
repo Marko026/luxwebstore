@@ -5,7 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { getBagAction } from "@/lib/bag-actions";
 
 type BagContextValue = {
-  /** Units in the signed-in User's Bag; 0 for a Guest. */
+  /** Units in the Bag of whoever has a session, Guest or User; 0 before a Guest's first "Add to bag". */
   units: number;
   setUnits: (units: number) => void;
 };

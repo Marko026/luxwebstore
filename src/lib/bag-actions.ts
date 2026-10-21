@@ -12,17 +12,18 @@ async function currentUserId() {
   return session?.user.id;
 }
 
-/** Adds one unit for the signed-in User and returns the new unit count. Guests get "signed-out" until Guest Bags exist. */
-export async function addToBagAction(
-  productSlug: string,
-): Promise<(AddToBagResult & { units: number }) | { status: "signed-out" }> {
-  const userId = await currentUserId();
-  if (!userId) return { status: "signed-out" };
-  const result = await addToBag(db, userId, String(productSlug));
-  return { ...result, units: (await getBag(db, userId)).units };
+/**
+ * Adds one unit and returns the new unit count. Someone with no session is a Guest adding for the first time: they
+ * are signed in anonymously here (the session cookie is set on this response), never earlier (ADR 0001).
+ */
+export async function addToBagAction(productSlug: string): Promise<AddToBagResult & { units: number }> {
+  const ownerId =
+    (await currentUserId()) ?? (await auth.api.signInAnonymous({ headers: await headers() })).user.id;
+  const result = await addToBag(db, ownerId, String(productSlug));
+  return { ...result, units: (await getBag(db, ownerId)).units };
 }
 
-/** The signed-in User's Bag; a Guest's is empty. */
+/** The Bag of whoever is signed in, Guest or User; empty when there is no session yet. */
 export async function getBagAction(): Promise<Bag> {
   const userId = await currentUserId();
   if (!userId) return emptyBag;
