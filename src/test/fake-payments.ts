@@ -1,8 +1,23 @@
 // A Payments fake for tests: records every session and lets a test mark one paid, make the next create fail, or run
 // something while the next session is being created.
-import type { NewSession, Payments } from "@/lib/payments";
+import type { DeliveryAddress, NewSession, Payments } from "@/lib/payments";
 
-type FakeSession = NewSession & { id: string; url: string; state: "open" | "paid" | "expired" };
+type FakeSession = NewSession & {
+  id: string;
+  url: string;
+  state: "open" | "paid" | "expired";
+  /** What the Guest or User gave on the provider's page, once paid. */
+  paidWith?: { email: string; deliveryAddress: DeliveryAddress };
+};
+
+export const anAddress: DeliveryAddress = {
+  name: "Ana Petrović",
+  line1: "Knez Mihailova 1",
+  line2: null,
+  city: "Ljubljana",
+  postalCode: "1000",
+  country: "SI",
+};
 
 export function fakePayments() {
   const sessions: FakeSession[] = [];
@@ -31,7 +46,11 @@ export function fakePayments() {
     },
     async readSession(sessionId) {
       const session = find(sessionId);
-      return { paid: session.state === "paid", email: session.email, deliveryAddress: null };
+      return {
+        paid: session.state === "paid",
+        email: session.paidWith?.email ?? session.email,
+        deliveryAddress: session.paidWith?.deliveryAddress ?? null,
+      };
     },
     async expireSession(sessionId) {
       const session = find(sessionId);
@@ -44,9 +63,15 @@ export function fakePayments() {
   return {
     payments,
     sessions,
-    /** The Guest or User paid on the provider's page. */
-    markPaid(sessionId: string) {
-      find(sessionId).state = "paid";
+    /** The Guest or User paid on the provider's page, giving an email (a User's is prefilled) and a delivery address. */
+    markPaid(sessionId: string, { email, deliveryAddress = anAddress }: { email?: string; deliveryAddress?: DeliveryAddress } = {}) {
+      const session = find(sessionId);
+      session.state = "paid";
+      session.paidWith = { email: email ?? session.email ?? "guest@example.test", deliveryAddress };
+    },
+    /** The session ran out on the provider's side, as Stripe's expiry event reports. */
+    markExpired(sessionId: string) {
+      find(sessionId).state = "expired";
     },
     failNextCreate() {
       failNextCreate = true;

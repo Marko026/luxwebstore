@@ -143,6 +143,59 @@ export const checkoutItems = pgTable(
   ],
 );
 
+/**
+ * What a Customer bought and paid for (ADR 0004): made from a paid Checkout by `completeCheckout`, never before. Every
+ * Order is paid, so there is no status. It keeps its own email and delivery address, so it outlives a deleted Guest.
+ */
+export const orders = pgTable(
+  "orders",
+  {
+    /** The Order number, shown as "LUX-" plus this. */
+    number: integer().primaryKey().generatedAlwaysAsIdentity({ startWith: 10001 }),
+    /** The Checkout it was made from, at most one Order each. Cleared when the Checkout goes with a stale Guest. */
+    checkoutId: integer("checkout_id")
+      .unique()
+      .references(() => checkouts.id, { onDelete: "set null" }),
+    /** Cleared when the Guest or User is deleted; the Order stays. */
+    userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
+    email: text().notNull(),
+    deliveryName: text("delivery_name").notNull(),
+    deliveryLine1: text("delivery_line1").notNull(),
+    deliveryLine2: text("delivery_line2"),
+    deliveryCity: text("delivery_city").notNull(),
+    deliveryPostalCode: text("delivery_postal_code").notNull(),
+    /** Two-letter country code, EU only. */
+    deliveryCountry: text("delivery_country").notNull(),
+    /** Euro cents, VAT included; delivery is free. */
+    totalCents: integer("total_cents").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("orders_user_id_idx").on(t.userId), check("orders_total_cents_check", sql`${t.totalCents} >= 0`)],
+);
+
+/** One product of an Order, with its price and name as bought. A product that has been ordered cannot be deleted. */
+export const orderItems = pgTable(
+  "order_items",
+  {
+    orderNumber: integer("order_number")
+      .notNull()
+      .references(() => orders.number, { onDelete: "cascade" }),
+    productId: integer("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    quantity: integer().notNull(),
+    /** Price in euro cents, VAT included, as bought. */
+    unitPriceCents: integer("unit_price_cents").notNull(),
+    productName: text("product_name").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orderNumber, t.productId] }),
+    index("order_items_product_id_idx").on(t.productId),
+    check("order_items_quantity_check", sql`${t.quantity} >= 1`),
+    check("order_items_unit_price_cents_check", sql`${t.unitPriceCents} >= 0`),
+  ],
+);
+
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));

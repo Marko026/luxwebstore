@@ -32,6 +32,7 @@ Next.js 16 (App Router) + React 19 + Tailwind 4, Drizzle ORM on Neon Postgres, B
 ## Environment
 - Required in `.env`: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`.
 - Checkout needs `STRIPE_SECRET_KEY`, a test-mode key (`sk_test_`); the app refuses any other. Never use live keys.
+- Stripe's webhook (`src/app/api/stripe/webhook`) needs `STRIPE_WEBHOOK_SECRET`. Locally it is optional: the confirmation page makes the Order, so the app works without the Stripe CLI and without the secret. To test the webhook, run `stripe listen --forward-to localhost:3000/api/stripe/webhook` and put the `whsec_` secret it prints in `.env`.
 
 ## Rules
 - Next 16 has breaking changes: read `node_modules/next/dist/docs/` before writing Next code.
