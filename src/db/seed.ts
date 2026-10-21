@@ -1,10 +1,13 @@
-// Loads the sample catalog. Idempotent: rows are upserted by slug, so it is safe to re-run.
+// Loads the sample catalog, and a test User for browser checks when TEST_USER_EMAIL and TEST_USER_PASSWORD are set.
+// Idempotent: rows are upserted by slug or email, so it is safe to re-run.
 // Run with: npm run db:seed. Every name, price and stock level is placeholder content.
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
-import { sql } from "drizzle-orm";
+import { hashPassword } from "better-auth/crypto";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
-import { categories, products } from "./schema";
+import { account, categories, products, user } from "./schema";
 
 const db = drizzle({ client: neon(process.env.DATABASE_URL!) });
 
@@ -103,6 +106,42 @@ async function main() {
     });
 
   console.log(`Seeded ${savedCategories.length} categories and ${rows.length} products.`);
+
+  await seedTestUser();
+}
+
+/**
+ * A User with an email-and-password account, as Better Auth's sign-up would create it; its password is reset on each run.
+ * Only an @example.test address (a reserved domain no real person has) is accepted, so the reset can never take over
+ * a real account. Stored lowercase, as Better Auth looks it up on sign-in.
+ */
+async function seedTestUser() {
+  const email = process.env.TEST_USER_EMAIL?.trim().toLowerCase();
+  const password = process.env.TEST_USER_PASSWORD;
+  if (!email || !password) return;
+  if (!email.endsWith("@example.test")) throw new Error(`TEST_USER_EMAIL must be an @example.test address, not ${email}`);
+
+  const [seeded] = await db
+    .insert(user)
+    .values({ id: randomUUID(), name: "Test User", email, isAnonymous: false })
+    .onConflictDoUpdate({ target: user.email, set: { updatedAt: sql`now()` } })
+    .returning({ id: user.id });
+  if (!seeded) throw new Error(`Could not seed test User ${email}`);
+  const { id } = seeded;
+
+  await db.batch([
+    db.delete(account).where(and(eq(account.userId, id), eq(account.providerId, "credential"))),
+    db.insert(account).values({
+      id: randomUUID(),
+      accountId: id,
+      providerId: "credential",
+      userId: id,
+      password: await hashPassword(password),
+      updatedAt: new Date(),
+    }),
+  ]);
+
+  console.log(`Seeded test User ${email}.`);
 }
 
 main().catch((err) => {

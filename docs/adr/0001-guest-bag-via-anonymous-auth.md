@@ -1,6 +1,6 @@
 # A Guest's Bag belongs to an anonymous Better Auth user
 
-A Guest can fill a Bag without signing in. Instead of our own `bagId` cookie or a browser-only Bag in localStorage, the first "Add to bag" signs the Guest in with Better Auth's anonymous plugin, so every Bag belongs to a user row. When the Guest signs in or signs up, the plugin's `onLinkAccount` hook merges their Bag into the account's Bag: Bag items for the same product keep the larger quantity, capped at Stock, and are not added together.
+A Guest can fill a Bag without signing in. Instead of our own `bagId` cookie or a browser-only Bag in localStorage, the first "Add to bag" signs the Guest in with Better Auth's anonymous plugin, so every Bag belongs to a user row. When the Guest signs in or signs up, the plugin's `onLinkAccount` hook merges their Bag into the account's Bag: Bag items for the same product keep the larger quantity, capped at Stock, and are not added together. A sold-out product is kept at quantity 1 rather than capped to 0, so it stays in the Bag marked "Sold out" instead of disappearing (a Bag item's quantity is at least 1).
 
 ## Considered Options
 
@@ -9,6 +9,6 @@ A Guest can fill a Bag without signing in. Instead of our own `bagId` cookie or 
 
 ## Consequences
 
-- Every Guest who adds something gets a `user` and a `session` row (`isAnonymous = true`). An anonymous user whose Bag has not changed for 30 days is deleted. A signed-in User's Bag does not expire.
+- Every Guest who adds something gets a `user` and a `session` row (`isAnonymous = true`). An anonymous user whose Bag has not changed for 30 days is deleted. A change is adding, changing a quantity or removing a Bag item; removing also touches the user row, so a Guest who emptied their Bag yesterday is kept. A Guest with an empty Bag is judged by their user row alone. A signed-in User's Bag does not expire.
 - The plugin adds a column to the auth schema, so `src/db/auth-schema.ts` must be regenerated and migrated.
 - Code that means "a real account" must check `isAnonymous` and not just test that a session exists.
