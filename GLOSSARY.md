@@ -15,7 +15,7 @@ Someone signed in to an account in the shop.
 _Avoid_: Account, member, shopper
 
 **Customer**:
-Someone who has placed an order. Not every User is a Customer.
+Someone who has placed an order. A Guest can be a Customer too, known by the email they gave at Checkout. Not every User is a Customer.
 _Avoid_: Buyer, client
 
 ### Buying
@@ -29,9 +29,25 @@ One product in a Bag, with how many of it are wanted.
 _Avoid_: Line, cart item, entry
 
 **Stock**:
-The number of units of a product that can be ordered online right now. Adding a product to a Bag does not take it out of Stock.
+The number of units of a product that can be ordered online right now. Adding a product to a Bag does not take it out of Stock; starting a Checkout does.
 _Avoid_: Inventory, availability
 
 **Subtotal**:
 What a Bag costs together at current catalogue prices, VAT included. A sold-out Bag item is left out; a Bag item with more units than are left in Stock still counts at its full quantity, so lowering it is the Guest's or User's own choice.
 _Avoid_: Order total, grand total
+
+**Checkout**:
+One attempt to pay for a Bag. It starts only when every Bag item is in Stock at its full quantity, takes those units out of Stock and fixes their prices. It can be paid for 30 minutes; after that it can no longer be paid and its units go back to Stock, though not necessarily at that same moment. A Guest or User has at most one open Checkout: starting another closes the earlier one and returns its units. Going back from paying closes it at once.
+_Avoid_: Payment session, pending order
+
+**Order**:
+What a Customer has bought and paid for. An Order exists only once its Checkout is paid; until then there is no Order. It keeps its own email and delivery address, so it outlives a Guest who is deleted.
+_Avoid_: Purchase, sale
+
+**Order number**:
+The short number a Customer uses to refer to their Order, such as LUX-10042.
+_Avoid_: Order ID
+
+**Order item**:
+One product in an Order, with how many were bought, the price each was bought at and the product's name at that time. Later catalogue changes do not touch it, and a product that has been ordered is never deleted.
+_Avoid_: Order line

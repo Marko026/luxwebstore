@@ -9,6 +9,7 @@ A Guest can fill a Bag without signing in. Instead of our own `bagId` cookie or 
 
 ## Consequences
 
-- Every Guest who adds something gets a `user` and a `session` row (`isAnonymous = true`). An anonymous user whose Bag has not changed for 30 days is deleted. A change is adding, changing a quantity or removing a Bag item; removing also touches the user row, so a Guest who emptied their Bag yesterday is kept. A Guest with an empty Bag is judged by their user row alone. A signed-in User's Bag does not expire.
+- Every Guest who adds something gets a `user` and a `session` row (`isAnonymous = true`). An anonymous user whose Bag has not changed for 30 days is deleted. A change is adding, changing a quantity or removing a Bag item; removing also touches the user row, so a Guest who emptied their Bag yesterday is kept. A Guest with an empty Bag is judged by their user row alone. Once Checkout exists (spec #21), starting one counts as a change too, so a Guest with an open Checkout is never stale. A signed-in User's Bag does not expire.
+- Once Checkout and Order exist (spec #21), the same `onLinkAccount` hook must also move the Guest's Checkouts (open, paid or closed) and Orders to the account, before the plugin deletes the anonymous user. A payment in progress then completes as the User's Order, and its units stay held. If the Guest and the account both have an open Checkout, the older one is closed, so an account still has at most one.
 - The plugin adds a column to the auth schema, so `src/db/auth-schema.ts` must be regenerated and migrated.
 - Code that means "a real account" must check `isAnonymous` and not just test that a session exists.
