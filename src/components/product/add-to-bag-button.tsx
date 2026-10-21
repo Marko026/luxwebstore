@@ -27,7 +27,7 @@ function messageFor(result: AddResult) {
  */
 export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boolean }) {
   const { data: session, refetch: refetchSession } = authClient.useSession();
-  const { setUnits } = useBag();
+  const { setBag, openBag } = useBag();
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -44,9 +44,11 @@ export function AddToBagButton({ slug, soldOut }: { slug: string; soldOut: boole
         setMessage("Something went wrong. Please try again.");
         return;
       }
-      setUnits(result.units);
+      setBag(result.bag);
       setMessage(messageFor(result));
-      // A first add signed a Guest in on the server; once the client knows that session, the Bag count loads for it
+      // Only a unit that went in opens the drawer; "Only N available" and "Just sold out" stay on the page
+      if (result.status === "added") openBag();
+      // A first add signed a Guest in on the server; once the client knows that session, the Bag loads for it
       if (!hadSession) refetchSession().catch((error) => console.error("Could not refresh the session", error));
     });
   };
