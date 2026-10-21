@@ -44,3 +44,6 @@ next-env.d.ts
 # local design references (third-party screenshots, never commit)
 /reference/
 /.taste-skill/inspect/
+
+# crash dumps from Git for Windows tools (e.g. grep.exe.stackdump)
+*.stackdump
