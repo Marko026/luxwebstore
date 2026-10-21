@@ -413,6 +413,19 @@ describe("deleteStaleGuests", () => {
     expect(await getBag(db, guest)).toMatchObject({ items: [expect.objectContaining({ slug, quantity: 1 })] });
   });
 
+  it("keeps a Guest who emptied their Bag after the cut-off: removing is a change too", async () => {
+    const guest = await aGuest();
+    const slug = await aProduct();
+    await addToBag(db, guest, slug);
+    await lastChanged(guest, { user: 60 });
+
+    await removeFromBag(db, guest, slug);
+
+    expect(await deleteStaleGuests(db, thirtyDaysAgo())).toBe(0);
+    // The Guest still exists: their Bag can still take a product.
+    expect(await addToBag(db, guest, slug)).toEqual({ status: "added", quantity: 1 });
+  });
+
   it("never deletes a User, however long their Bag has not changed", async () => {
     const owner = await aUser();
     const slug = await aProduct();

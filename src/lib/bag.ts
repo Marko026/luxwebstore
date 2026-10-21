@@ -94,9 +94,16 @@ export async function setQuantity(
 
 /** Takes the Bag item out of the Bag, whatever its quantity. Nothing happens if it isn't there. */
 export async function removeFromBag(db: Db, ownerId: string, productSlug: string): Promise<void> {
-  await db
-    .delete(bagItems)
-    .where(and(eq(bagItems.userId, ownerId), inArray(bagItems.productId, productIdBySlug(db, productSlug))));
+  // A removal leaves no Bag item to date it, so it marks the owner as changed instead (`deleteStaleGuests` reads
+  // that). One statement: the update runs only if the delete took something out.
+  await db.execute(sql`
+    with removed as (
+      delete from ${bagItems}
+      where user_id = ${ownerId} and product_id in (${productIdBySlug(db, productSlug)})
+      returning user_id
+    )
+    update ${schema.user} set updated_at = now() where id in (select user_id from removed)
+  `);
 }
 
 function productIdBySlug(db: Db, productSlug: string) {
@@ -195,8 +202,8 @@ export async function mergeBags(db: Db, fromOwnerId: string, toOwnerId: string):
 
 /**
  * Deletes Guests whose Bag has not changed since `olderThan`; their Bag items go with them (cascade).
- * A Bag's last change is its latest Bag item update; a Guest with an empty Bag falls back to the Guest's
- * own `updatedAt` (set when the first "Add to bag" created them). Users are never deleted.
+ * A Bag's last change is the later of its latest Bag item update and the Guest's own `updatedAt` (set when the first
+ * "Add to bag" created them, and by every `removeFromBag`). Users are never deleted.
  * One statement, so a Bag changed while it runs is either seen as recent or not, never half-deleted.
  */
 export async function deleteStaleGuests(db: Db, olderThan: Date): Promise<number> {
