@@ -20,6 +20,7 @@ const checkoutRefusals: Record<Exclude<CheckoutStart["status"], "started">, stri
   "empty-bag": "Your bag is empty.",
   "bag-not-ready": "An item in your bag sold out or ran short meanwhile.",
   "earlier-checkout-paid": "Your earlier checkout has already been paid.",
+  "too-many-attempts": "Too many attempts. Please try again later.",
 };
 
 function noteFor(item: BagItem) {
