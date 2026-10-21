@@ -18,8 +18,9 @@ const terms = [...glossary.matchAll(/^_Avoid_:\s*(.+)$/gm)]
   .map((term) => term.trim().toLowerCase())
   .filter((term) => term && !exempt.has(term));
 
-// A term matches as whole words, also in the plural.
-const patterns = terms.map((term) => ({ term, regex: new RegExp(`(^| )${term}s?( |$)`) }));
+// A term matches as whole words, also in the plural (inventory -> inventories).
+const plural = (term) => (term.endsWith("y") ? `${term.slice(0, -1)}ies` : `${term}s`);
+const patterns = terms.map((term) => ({ term, regex: new RegExp(`(^| )(${term}|${plural(term)})( |$)`) }));
 
 const words = (text) =>
   ` ${text.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase().replace(/[^a-z]+/g, " ")} `.replace(/ +/g, " ");

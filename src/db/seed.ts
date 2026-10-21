@@ -110,11 +110,16 @@ async function main() {
   await seedTestUser();
 }
 
-/** A User with an email-and-password account, as Better Auth's sign-up would create it; its password is reset on each run. */
+/**
+ * A User with an email-and-password account, as Better Auth's sign-up would create it; its password is reset on each run.
+ * Only an @example.test address (a reserved domain no real person has) is accepted, so the reset can never take over
+ * a real account. Stored lowercase, as Better Auth looks it up on sign-in.
+ */
 async function seedTestUser() {
-  const email = process.env.TEST_USER_EMAIL;
+  const email = process.env.TEST_USER_EMAIL?.trim().toLowerCase();
   const password = process.env.TEST_USER_PASSWORD;
   if (!email || !password) return;
+  if (!email.endsWith("@example.test")) throw new Error(`TEST_USER_EMAIL must be an @example.test address, not ${email}`);
 
   const [seeded] = await db
     .insert(user)

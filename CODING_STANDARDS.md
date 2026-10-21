@@ -13,4 +13,4 @@ Flag any `.then(...)` or awaited call that sets state and misses one of these tw
 
 ## Writes without a session
 
-A server function or route handler is reachable by a direct POST from anyone. When it writes rows for a caller with no session (for example creating an anonymous user), each request must be bounded: a limit per client, or a check that the request can succeed before anything is created, with the reason recorded in an ADR. Flag any such write that a script could repeat without limit.
+A server function or route handler is reachable by a direct POST from anyone. When it writes rows for a caller with no session (for example creating an anonymous user), repeated requests must be bounded by a limit per client (or an idempotency key), with the choice recorded in an ADR. Checking that the request can succeed before anything is created is a useful extra guard, but it does not bound repeated valid requests. Flag any such write that a script could repeat without limit.
