@@ -40,7 +40,7 @@ function CategorySkeleton() {
   return <div aria-busy className="h-60 lg:h-72" />;
 }
 
-/** Category page: title, item count, then the same edge-to-edge grid as /products (4 across, 2 on a phone). */
+/** Category page: title, item count, then the same edge-to-edge grid as /products (2 large columns). */
 async function CategoryProducts({ params }: { params: PageProps<"/category/[slug]">["params"] }) {
   const { slug } = await params;
   const [category, categories] = await Promise.all([getCategory(slug), getCategories()]);
@@ -78,10 +78,10 @@ async function CategoryProducts({ params }: { params: PageProps<"/category/[slug
       </div>
 
       {category.products.length ? (
-        <ul className="grid grid-cols-2 lg:grid-cols-4">
+        <ul className="grid grid-cols-2">
           {category.products.map((p) => (
             <li key={p.slug}>
-              <ProductCard product={p} sizes="(min-width: 1024px) 25vw, 50vw" />
+              <ProductCard product={p} sizes="50vw" />
             </li>
           ))}
         </ul>

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description: "Leather handbags, shoulder bags, crossbody bags and men's bags, hand-finished in Italy.",
 };
 
-/** Category page, as on the reference: editorial hero, item count, then a 4-across edge-to-edge grid (2 on a phone). */
+/** Category page, as on the reference: editorial hero, item count, then an edge-to-edge grid of 2 large columns at every width. */
 export default async function ProductsPage() {
   const [products, categories] = await Promise.all([getProducts(), getCategories()]);
 
@@ -64,10 +64,10 @@ export default async function ProductsPage() {
           <CategoryNav categories={categories} active={null} />
         </div>
 
-        <ul className="grid grid-cols-2 lg:grid-cols-4">
+        <ul className="grid grid-cols-2">
           {products.map((p) => (
             <li key={p.slug}>
-              <ProductCard product={p} sizes="(min-width: 1024px) 25vw, 50vw" />
+              <ProductCard product={p} sizes="50vw" />
             </li>
           ))}
         </ul>

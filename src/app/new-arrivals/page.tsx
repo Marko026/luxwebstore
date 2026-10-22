@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * Newest products in the same title row and edge-to-edge grid as the category page (4 across, 2 on a phone).
+ * Newest products in the same title row and edge-to-edge grid as the category page (2 large columns at every width).
  * The category bar marks no link as current (this isn't a category); the button under the grid leads on to every bag.
  */
 export default async function NewArrivalsPage() {
@@ -51,10 +51,10 @@ export default async function NewArrivalsPage() {
 
         {products.length ? (
           <>
-            <ul className="grid grid-cols-2 lg:grid-cols-4">
+            <ul className="grid grid-cols-2">
               {products.map((p) => (
                 <li key={p.slug}>
-                  <ProductCard product={p} sizes="(min-width: 1024px) 25vw, 50vw" />
+                  <ProductCard product={p} sizes="50vw" />
                 </li>
               ))}
             </ul>

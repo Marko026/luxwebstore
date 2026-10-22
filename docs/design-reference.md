@@ -146,6 +146,11 @@ around an image. `tile` stays as its own token for the packshot ground role.
 - Sub-category bar is a horizontal scroll on every width.
 - PDP: two columns → single column, sticky bottom Add to bag; gallery shows a `1 / 10` counter.
 
+**Deliberate departure:** the catalog lists (`/products`, a category, New Arrivals) show **2 columns at every width**,
+edge to edge, after Cartier Roadster Universe's large cards (spec #47). A small catalogue reads better as few large
+packshots than as a dense grid. The tile is `paper`, so white space separates the cards, with no lines. The PDP's
+"You may also like" keeps 3 columns.
+
 ## 10. Motion
 
 One easing everywhere: **`cubic-bezier(0.5, 0, 0, 1)`, 0.8s** (opacity, transform, colour, max-height),
