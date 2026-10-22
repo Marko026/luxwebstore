@@ -576,25 +576,22 @@ describe("getOrderByNumber", () => {
     expect(await getOrderByNumber(db, await aUser(), order.number)).toBeUndefined();
   });
 
-  it.each([
-    ["an unknown number", "LUX-1"],
-    ["a number too large to be one", "LUX-99999999999"],
-    ["a number without its prefix", "10001"],
-    ["a lower-case prefix", "lux-10001"],
-    ["something else", "LUX-abc"],
-    ["an empty string", ""],
-  ])("finds nothing for %s", async (_, number) => {
-    const owner = await aUser();
-    await paidOrder(owner, await aProduct());
-
-    expect(await getOrderByNumber(db, owner, number)).toBeUndefined();
-  });
-
-  it("finds an Order only by the spelling it is shown with, not with a leading zero", async () => {
+  // Each spelling but the unknown and the too large one is made from the owner's own Order number, so only the check
+  // of its form can make it find nothing
+  it.each<[string, (shown: string) => string]>([
+    ["an unknown number", () => "LUX-1"],
+    ["a number too large for the integer column", () => "LUX-2147483648"],
+    ["the number without its prefix", (shown) => shown.slice("LUX-".length)],
+    ["a lower-case prefix", (shown) => shown.toLowerCase()],
+    ["a leading zero", (shown) => shown.replace("LUX-", "LUX-0")],
+    ["trailing characters", (shown) => `${shown}abc`],
+    ["surrounding spaces", (shown) => ` ${shown} `],
+    ["an empty string", () => ""],
+  ])("finds nothing for %s", async (_, spell) => {
     const owner = await aUser();
     const order = await paidOrder(owner, await aProduct());
 
-    expect(await getOrderByNumber(db, owner, order.number.replace("LUX-", "LUX-0"))).toBeUndefined();
+    expect(await getOrderByNumber(db, owner, spell(order.number))).toBeUndefined();
   });
 
   it("keeps the price and name the Order was bought at after the catalogue changes", async () => {

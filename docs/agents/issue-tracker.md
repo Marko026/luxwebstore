@@ -4,6 +4,8 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 ## Conventions
 
+Run `gh` from the Bash tool: PowerShell 5.1 strips the double quotes inside `--jq` filters and GraphQL queries, and its `ConvertFrom-Json` reads a JSON array as one object.
+
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
 - **Read an issue**: `gh issue view <number> --json number,title,body,labels,comments`.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
@@ -32,7 +34,7 @@ CodeRabbit's inline comments are mostly HTML and the scripts it ran. List each f
 
 Comments keep arriving after a review's first batch (security findings come later), so list them again right before merging.
 
-To resolve the thread of an inline comment once it is addressed, run this from the Bash tool, not PowerShell (PowerShell strips the quotes inside the GraphQL query). Set `PR` and `COMMENT_ID` (the comment's numeric `id`) first:
+To resolve the thread of an inline comment once it is addressed, set `PR` and `COMMENT_ID` (the comment's numeric `id`) and run:
 
 `id=$(gh api graphql -f query="query { repository(owner: \"Marko026\", name: \"luxwebstore\") { pullRequest(number: $PR) { reviewThreads(first: 100) { nodes { id comments(first: 1) { nodes { databaseId } } } } } } }" --jq ".data.repository.pullRequest.reviewThreads.nodes[] | select(.comments.nodes[0].databaseId == $COMMENT_ID) | .id") && gh api graphql -f query="mutation { resolveReviewThread(input: { threadId: \"$id\" }) { thread { isResolved } } }" --jq .data.resolveReviewThread.thread.isResolved`
 
