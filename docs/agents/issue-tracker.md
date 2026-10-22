@@ -32,6 +32,10 @@ CodeRabbit's inline comments are mostly HTML and the scripts it ran. List each f
 
 Comments keep arriving after a review's first batch (security findings come later), so list them again right before merging.
 
+To resolve the thread of an inline comment once it is addressed, run this from the Bash tool, not PowerShell (PowerShell strips the quotes inside the GraphQL query). Set `PR` and `COMMENT_ID` (the comment's numeric `id`) first:
+
+`id=$(gh api graphql -f query="query { repository(owner: \"Marko026\", name: \"luxwebstore\") { pullRequest(number: $PR) { reviewThreads(first: 100) { nodes { id comments(first: 1) { nodes { databaseId } } } } } } }" --jq ".data.repository.pullRequest.reviewThreads.nodes[] | select(.comments.nodes[0].databaseId == $COMMENT_ID) | .id") && gh api graphql -f query="mutation { resolveReviewThread(input: { threadId: \"$id\" }) { thread { isResolved } } }" --jq .data.resolveReviewThread.thread.isResolved`
+
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either: resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
 ## When a skill says "publish to the issue tracker"
