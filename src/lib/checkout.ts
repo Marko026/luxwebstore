@@ -212,10 +212,13 @@ export async function moveCheckoutsAndOrders(db: Db, payments: Payments, fromOwn
       paidSessionId = older.stripeSessionId!;
     }
   }
-  await db.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
-  // After the Checkouts: moving them waits for an Order being made from one of them, so that Order moves here too,
-  // and any made later takes its owner from its moved Checkout
-  await db.update(orders).set({ userId: toOwnerId }).where(eq(orders.userId, fromOwnerId));
+  // Together, so a failure never leaves the Checkouts moved and the Orders behind with a Guest about to be deleted
+  await db.transaction(async (tx) => {
+    await tx.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
+    // After the Checkouts: moving them waits for an Order being made from one of them, so that Order moves here too,
+    // and any made later takes its owner from its moved Checkout
+    await tx.update(orders).set({ userId: toOwnerId }).where(eq(orders.userId, fromOwnerId));
+  });
   if (paidSessionId) {
     // Signing in must not fail over it: Stripe's webhook or the confirmation page completes it later
     await completeCheckout(db, payments, paidSessionId).catch((error) =>
