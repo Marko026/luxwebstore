@@ -2,7 +2,7 @@
 // port as parameters, so tests pass their own; nothing here imports Stripe.
 // A Checkout is closed only after its Stripe session can no longer be paid, and closing puts its units back in Stock in
 // the same transaction that marks it closed.
-import { and, asc, eq, exists, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { bagItems, checkoutItems, checkouts, orderItems, orders, products, user, type ProductImage } from "@/db/schema";
 import { getBag, type Bag, type Db } from "@/lib/bag";
 import type { DeliveryAddress, Payments } from "@/lib/payments";
@@ -48,6 +48,7 @@ export type Order = {
   totalCents: number;
   email: string;
   deliveryAddress: DeliveryAddress;
+  createdAt: Date;
 };
 
 export type CompleteCheckoutResult =
@@ -348,11 +349,38 @@ export async function cancelCheckout(db: Db, payments: Payments, ownerId: string
 
 /** The Order of the Checkout with this Stripe session, only if it belongs to `ownerId`. */
 export async function getOrder(db: Db, ownerId: string, sessionId: string): Promise<Order | undefined> {
-  return findOrder(db, and(eq(checkouts.stripeSessionId, sessionId), eq(orders.userId, ownerId))!);
+  const checkout = db.select({ id: checkouts.id }).from(checkouts).where(eq(checkouts.stripeSessionId, sessionId));
+  return findOrder(db, and(inArray(orders.checkoutId, checkout), eq(orders.userId, ownerId))!);
+}
+
+/** The owner's Orders, newest first. */
+export async function listOrders(db: Db, ownerId: string): Promise<Order[]> {
+  return findOrders(db, eq(orders.userId, ownerId));
+}
+
+/** The Order with this Order number as the Customer sees it (such as "LUX-10042"), only if it belongs to `ownerId`. */
+export async function getOrderByNumber(db: Db, ownerId: string, orderNumber: string): Promise<Order | undefined> {
+  const number = storedOrderNumber(orderNumber);
+  if (number === undefined) return undefined;
+  return findOrder(db, and(eq(orders.number, number), eq(orders.userId, ownerId))!);
+}
+
+/** The number an Order is stored under, or undefined for anything not shaped like "LUX-10042". */
+function storedOrderNumber(shown: string): number | undefined {
+  const match = /^LUX-(\d{1,10})$/.exec(shown);
+  const number = match ? Number(match[1]) : 0;
+  // A larger one cannot be an Order's, and Postgres would reject it for the integer column
+  return number > 0 && number <= 2_147_483_647 ? number : undefined;
 }
 
 async function findOrder(db: Db, where: SQL): Promise<Order | undefined> {
-  const [order] = await db
+  const [order] = await findOrders(db, where);
+  return order;
+}
+
+// Not joined to the Checkout: an Order outlives it (cleared with a stale Guest), and only `getOrder` starts from one
+async function findOrders(db: Db, where: SQL): Promise<Order[]> {
+  const found = await db
     .select({
       number: orders.number,
       email: orders.email,
@@ -363,13 +391,15 @@ async function findOrder(db: Db, where: SQL): Promise<Order | undefined> {
       postalCode: orders.deliveryPostalCode,
       country: orders.deliveryCountry,
       totalCents: orders.totalCents,
+      createdAt: orders.createdAt,
     })
     .from(orders)
-    .innerJoin(checkouts, eq(checkouts.id, orders.checkoutId))
-    .where(where);
-  if (!order) return undefined;
+    .where(where)
+    .orderBy(desc(orders.createdAt), desc(orders.number));
+  if (found.length === 0) return [];
   const items = await db
     .select({
+      orderNumber: orderItems.orderNumber,
       productSlug: products.slug,
       productName: orderItems.productName,
       images: products.images,
@@ -378,16 +408,24 @@ async function findOrder(db: Db, where: SQL): Promise<Order | undefined> {
     })
     .from(orderItems)
     .innerJoin(products, eq(products.id, orderItems.productId))
-    .where(eq(orderItems.orderNumber, order.number))
+    .where(inArray(orderItems.orderNumber, found.map((order) => order.number)))
     .orderBy(asc(orderItems.productId));
-  const { number, email, totalCents, ...deliveryAddress } = order;
-  return {
+  return found.map(({ number, email, totalCents, createdAt, ...deliveryAddress }) => ({
     number: `LUX-${number}`,
-    items: items.map(({ images, ...item }) => ({ ...item, packshot: images[0] })),
+    items: items
+      .filter((item) => item.orderNumber === number)
+      .map(({ productSlug, productName, images, quantity, unitPriceCents }) => ({
+        productSlug,
+        productName,
+        packshot: images[0],
+        quantity,
+        unitPriceCents,
+      })),
     totalCents,
     email,
     deliveryAddress,
-  };
+    createdAt,
+  }));
 }
 
 /** The closing rule: ends the Checkout's session first, and returns its units only once it can no longer be paid. */

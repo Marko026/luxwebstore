@@ -10,6 +10,8 @@ import {
   expireCheckout,
   expireCheckouts,
   getOrder,
+  getOrderByNumber,
+  listOrders,
   moveCheckoutsAndOrders,
   startCheckout,
 } from "./checkout";
@@ -64,6 +66,16 @@ const complete = (sessionId: string) => completeCheckout(db, stripe.payments, se
 const lastSession = () => stripe.sessions.at(-1)!;
 const bagOf = async (owner: string) =>
   (await getBag(db, owner)).items.map(({ slug, quantity }) => ({ slug, quantity }));
+
+/** Pays for one unit of the product as `owner` and returns the Order it became. */
+async function paidOrder(owner: string, slug: string) {
+  await inBag(owner, slug);
+  await start(owner);
+  stripe.markPaid(lastSession().id);
+  const result = await complete(lastSession().id);
+  if (result.status !== "completed") throw new Error("Not completed");
+  return result.order;
+}
 
 describe("startCheckout", () => {
   it("takes a ready Bag's units out of Stock and sends its prices and names to the payment page", async () => {
@@ -418,6 +430,7 @@ describe("completeCheckout", () => {
       totalCents: 320_000,
       email: `${owner}@example.com`,
       deliveryAddress: anAddress,
+      createdAt: expect.any(Date),
     };
     expect(result).toEqual({ status: "completed", order });
     expect(await getOrder(db, owner, session.id)).toEqual(order);
@@ -521,6 +534,73 @@ describe("getOrder", () => {
     expect(await getOrder(db, owner, session.id)).toBeDefined();
     expect(await getOrder(db, someoneElse, session.id)).toBeUndefined();
     expect(await getOrder(db, owner, "cs_test_not_ours")).toBeUndefined();
+  });
+});
+
+describe("listOrders", () => {
+  it("lists the owner's Orders newest first, each with its date, total and items, and nobody else's", async () => {
+    const owner = await aUser();
+    const older = await paidOrder(owner, await aProduct({ priceCents: 120_000 }));
+    const newer = await paidOrder(owner, await aProduct({ priceCents: 80_000 }));
+    await paidOrder(await aUser(), await aProduct());
+
+    const list = await listOrders(db, owner);
+
+    expect(list).toEqual([newer, older]);
+    expect(newer).toMatchObject({ totalCents: 80_000, items: [expect.objectContaining({ quantity: 1 })] });
+    expect(newer.createdAt.getTime()).toBeGreaterThanOrEqual(older.createdAt.getTime());
+  });
+
+  it("gives an owner with no Orders an empty list", async () => {
+    expect(await listOrders(db, await aUser())).toEqual([]);
+  });
+
+  it("lists the Orders a Guest made under the account they signed in to", async () => {
+    const guest = await aGuest();
+    const account = await aUser();
+    const order = await paidOrder(guest, await aProduct());
+
+    await moveCheckoutsAndOrders(db, stripe.payments, guest, account);
+    await db.delete(user).where(eq(user.id, guest));
+
+    expect(await listOrders(db, account)).toEqual([order]);
+  });
+});
+
+describe("getOrderByNumber", () => {
+  it("shows an Order by its Order number only to its owner", async () => {
+    const owner = await aUser();
+    const order = await paidOrder(owner, await aProduct());
+
+    expect(await getOrderByNumber(db, owner, order.number)).toEqual(order);
+    expect(await getOrderByNumber(db, await aUser(), order.number)).toBeUndefined();
+  });
+
+  it.each([
+    ["an unknown number", "LUX-1"],
+    ["a number too large to be one", "LUX-99999999999"],
+    ["a number without its prefix", "10001"],
+    ["a lower-case prefix", "lux-10001"],
+    ["something else", "LUX-abc"],
+    ["an empty string", ""],
+  ])("finds nothing for %s", async (_, number) => {
+    const owner = await aUser();
+    await paidOrder(owner, await aProduct());
+
+    expect(await getOrderByNumber(db, owner, number)).toBeUndefined();
+  });
+
+  it("keeps the price and name the Order was bought at after the catalogue changes", async () => {
+    const owner = await aUser();
+    const slug = await aProduct({ priceCents: 100_000 });
+    const order = await paidOrder(owner, slug);
+    const { productName } = order.items[0]!;
+    await db.update(products).set({ priceCents: 150_000, name: "Renamed" }).where(eq(products.slug, slug));
+
+    expect(await getOrderByNumber(db, owner, order.number)).toMatchObject({
+      items: [expect.objectContaining({ productName, unitPriceCents: 100_000 })],
+      totalCents: 100_000,
+    });
   });
 });
 
