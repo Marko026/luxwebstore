@@ -590,6 +590,13 @@ describe("getOrderByNumber", () => {
     expect(await getOrderByNumber(db, owner, number)).toBeUndefined();
   });
 
+  it("finds an Order only by the spelling it is shown with, not with a leading zero", async () => {
+    const owner = await aUser();
+    const order = await paidOrder(owner, await aProduct());
+
+    expect(await getOrderByNumber(db, owner, order.number.replace("LUX-", "LUX-0"))).toBeUndefined();
+  });
+
   it("keeps the price and name the Order was bought at after the catalogue changes", async () => {
     const owner = await aUser();
     const slug = await aProduct({ priceCents: 100_000 });

@@ -367,7 +367,8 @@ export async function getOrderByNumber(db: Db, ownerId: string, orderNumber: str
 
 /** The number an Order is stored under, or undefined for anything not shaped like "LUX-10042". */
 function storedOrderNumber(shown: string): number | undefined {
-  const match = /^LUX-(\d{1,10})$/.exec(shown);
+  // No leading zeros: each Order has one spelling, the one it is shown with
+  const match = /^LUX-([1-9]\d{0,9})$/.exec(shown);
   const number = match ? Number(match[1]) : 0;
   // A larger one cannot be an Order's, and Postgres would reject it for the integer column
   return number > 0 && number <= 2_147_483_647 ? number : undefined;
@@ -410,17 +411,15 @@ async function findOrders(db: Db, where: SQL): Promise<Order[]> {
     .innerJoin(products, eq(products.id, orderItems.productId))
     .where(inArray(orderItems.orderNumber, found.map((order) => order.number)))
     .orderBy(asc(orderItems.productId));
+  const itemsOf = new Map<number, OrderItem[]>();
+  for (const { orderNumber, images, ...item } of items) {
+    const list = itemsOf.get(orderNumber) ?? [];
+    list.push({ ...item, packshot: images[0] });
+    itemsOf.set(orderNumber, list);
+  }
   return found.map(({ number, email, totalCents, createdAt, ...deliveryAddress }) => ({
     number: `LUX-${number}`,
-    items: items
-      .filter((item) => item.orderNumber === number)
-      .map(({ productSlug, productName, images, quantity, unitPriceCents }) => ({
-        productSlug,
-        productName,
-        packshot: images[0],
-        quantity,
-        unitPriceCents,
-      })),
+    items: itemsOf.get(number) ?? [],
     totalCents,
     email,
     deliveryAddress,
