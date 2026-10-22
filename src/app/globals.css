@@ -27,7 +27,7 @@
   --color-*: initial;
   --color-ink: #000000; /* text, primary button, footer field */
   --color-paper: #ffffff; /* page ground */
-  --color-tile: #fbfbfb; /* product tile ground = packshot ground */
+  --color-tile: var(--color-paper); /* product tile ground = packshot ground = page ground (#ffffff) */
   --color-line: rgb(0 0 0 / 0.15); /* form fields, accordions only */
   --color-muted: #6b6b6b; /* secondary notes; 4.5:1 on paper and on tile */
   --color-scrim: rgb(0 0 0 / 0.4); /* drawer backdrop */

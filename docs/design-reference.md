@@ -90,7 +90,7 @@ browse with its sections in view than behind a menu.
 - Colour variants are shown as **image swatches** of the product itself, not colour dots.
 
 **For luxwebstore**
-- A photography spec for our own products: centred packshot, ground `#fbfbfb`, same crop and margin for
+- A photography spec for our own products: centred packshot, ground `#ffffff` (see Colour), same crop and margin for
   every SKU, 3:4 ratio. Plus a separate set of lifestyle/editorial shots.
 - Product card: image carousel on hover/swipe, name, price, optional badge. No border, no shadow, no "Add to
   cart" on the card.
@@ -131,6 +131,10 @@ are a whole field of black.
 
 **For luxwebstore:** the same monochrome token set (`ink`, `paper`, `tile`, `line`, `muted`, `scrim`), and
 our brand colour (when we pick one) used sparingly, or not in the UI at all.
+
+**Deliberate departure:** `tile` is `#ffffff`, the same as `paper`, not the reference's `#fbfbfb`. Our packshots
+are cut out on pure white and the cards sit on the page ground, so one white everywhere means no visible edge
+around an image. `tile` stays as its own token for the packshot ground role.
 
 ## 9. Responsive behaviour
 
