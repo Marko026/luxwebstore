@@ -4,7 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
 import { db } from "@/db";
 import { mergeBags } from "@/lib/bag";
-import { moveCheckouts } from "@/lib/checkout";
+import { moveCheckoutsAndOrders } from "@/lib/checkout";
 import { stripePayments } from "@/lib/stripe-payments";
 
 export const auth = betterAuth({
@@ -15,11 +15,11 @@ export const auth = betterAuth({
   plugins: [
     // A Guest's Bag belongs to an anonymous user, created on their first "Add to bag" (ADR 0001)
     anonymous({
-      // A Guest who signs in or signs up keeps their Bag and their Checkouts. The plugin then deletes the anonymous
-      // user, and its emptied Bag goes with it.
+      // A Guest who signs in or signs up keeps their Bag, their Checkouts and their Orders. The plugin then deletes
+      // the anonymous user, and its emptied Bag goes with it.
       onLinkAccount: async ({ anonymousUser, newUser }) => {
         await mergeBags(db, anonymousUser.user.id, newUser.user.id);
-        await moveCheckouts(db, stripePayments, anonymousUser.user.id, newUser.user.id);
+        await moveCheckoutsAndOrders(db, stripePayments, anonymousUser.user.id, newUser.user.id);
       },
     }),
     // Lets a server function set the session cookie (the anonymous sign-in); must stay last

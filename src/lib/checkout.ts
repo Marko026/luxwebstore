@@ -190,14 +190,14 @@ export async function expireCheckouts(db: Db, payments: Payments, now: Date): Pr
 }
 
 /**
- * Moves every Checkout of `fromOwnerId` (a Guest who just signed in or signed up), open, paid or closed, to
- * `toOwnerId`, before the Guest is deleted with whatever is still theirs (ADR 0001). A payment in progress then
- * completes as the User's, and its units stay held. If both have an open Checkout, the older one is closed by the
+ * Moves every Checkout of `fromOwnerId` (a Guest who just signed in or signed up), open, paid or closed, and every
+ * Order to `toOwnerId`, before the Guest is deleted with whatever is still theirs (ADR 0001). A payment in progress
+ * then completes as the User's, and its units stay held. If both have an open Checkout, the older one is closed by the
  * closing rule. If it turns out paid, it is marked paid instead (its units stay out of Stock) and the newer one stays
  * open, so the account keeps at most one open and loses no payment in progress. Once moved, the paid one becomes the
- * account's Order, its units leaving the merged Bag.
+ * account's Order, its units leaving the merged Bag. Only this Guest's Orders move, never ones matched by email.
  */
-export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: string, toOwnerId: string) {
+export async function moveCheckoutsAndOrders(db: Db, payments: Payments, fromOwnerId: string, toOwnerId: string) {
   if (fromOwnerId === toOwnerId) return;
   const [fromOpen, toOpen] = await Promise.all([openCheckoutOf(db, fromOwnerId), openCheckoutOf(db, toOwnerId)]);
   let paidSessionId: string | undefined;
@@ -212,7 +212,13 @@ export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: str
       paidSessionId = older.stripeSessionId!;
     }
   }
-  await db.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
+  // Together, so a failure never leaves the Checkouts moved and the Orders behind with a Guest about to be deleted
+  await db.transaction(async (tx) => {
+    await tx.update(checkouts).set({ userId: toOwnerId }).where(eq(checkouts.userId, fromOwnerId));
+    // After the Checkouts: moving them waits for an Order being made from one of them, so that Order moves here too,
+    // and any made later takes its owner from its moved Checkout
+    await tx.update(orders).set({ userId: toOwnerId }).where(eq(orders.userId, fromOwnerId));
+  });
   if (paidSessionId) {
     // Signing in must not fail over it: Stripe's webhook or the confirmation page completes it later
     await completeCheckout(db, payments, paidSessionId).catch((error) =>
@@ -226,7 +232,7 @@ export async function moveCheckouts(db: Db, payments: Payments, fromOwnerId: str
  * (not from Stripe's line items) and its email and delivery address from Stripe, marks the Checkout paid and takes the
  * bought units out of the owner's Bag (units added meanwhile stay). Called by Stripe's webhook and the confirmation
  * page, whichever comes first; calling it again returns the same Order. Decides by whether the Checkout has an Order,
- * not by its state: a Checkout can be marked paid before its Order exists (`moveCheckouts`).
+ * not by its state: a Checkout can be marked paid before its Order exists (`moveCheckoutsAndOrders`).
  */
 export async function completeCheckout(db: Db, payments: Payments, sessionId: string): Promise<CompleteCheckoutResult> {
   const [checkout] = await db

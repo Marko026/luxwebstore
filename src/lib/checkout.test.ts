@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+﻿import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { bagItems, categories, checkouts, orders, products, user } from "@/db/schema";
 import { createTestDb } from "@/test/db";
@@ -10,7 +10,7 @@ import {
   expireCheckout,
   expireCheckouts,
   getOrder,
-  moveCheckouts,
+  moveCheckoutsAndOrders,
   startCheckout,
 } from "./checkout";
 
@@ -479,7 +479,7 @@ describe("completeCheckout", () => {
     await start(owner);
     const session = lastSession();
     stripe.markPaid(session.id);
-    // Setup only: what `moveCheckouts` does to an older open Checkout that Stripe reports paid
+    // Setup only: what `moveCheckoutsAndOrders` does to an older open Checkout that Stripe reports paid
     await db.update(checkouts).set({ state: "paid" }).where(eq(checkouts.stripeSessionId, session.id));
 
     expect(await complete(session.id)).toMatchObject({ status: "completed" });
@@ -634,9 +634,9 @@ describe("expireCheckouts", () => {
   });
 });
 
-describe("moveCheckouts", () => {
-  const move = (guest: string, account: string) => moveCheckouts(db, stripe.payments, guest, account);
-  /** The anonymous user is deleted once their Bag and Checkouts have moved (ADR 0001). */
+describe("moveCheckoutsAndOrders", () => {
+  const move = (guest: string, account: string) => moveCheckoutsAndOrders(db, stripe.payments, guest, account);
+  /** The anonymous user is deleted once their Bag, Checkouts and Orders have moved (ADR 0001). */
   const deleteGuest = (guest: string) => db.delete(user).where(eq(user.id, guest));
 
   it("hands a Guest's open Checkout to the account: its units stay held, and the account's next start ends it", async () => {
@@ -709,6 +709,62 @@ describe("moveCheckouts", () => {
     // The newer one is the account's one open Checkout: its next start ends it, and the paid one is no longer open
     expect(await start(account)).toMatchObject({ status: "started" });
     expect(newerSession.state).toBe("expired");
+  });
+
+  /** Pays for the owner's Bag of one product and makes the Order; returns its session id and Order number. */
+  async function anOrder(owner: string) {
+    await inBag(owner, await aProduct());
+    await start(owner);
+    const session = lastSession();
+    stripe.markPaid(session.id, { email: "ana@example.test" });
+    const result = await complete(session.id);
+    if (result.status !== "completed") throw new Error("Not completed");
+    return { sessionId: session.id, number: result.order.number };
+  }
+
+  it("hands a Guest's Orders to the account, whatever its email, and leaves other owners' alone", async () => {
+    const guest = await aGuest();
+    const account = await aUser();
+    const someoneElse = await aUser();
+    const first = await anOrder(guest);
+    const second = await anOrder(guest);
+    const theirs = await anOrder(someoneElse);
+
+    await move(guest, account);
+    await deleteGuest(guest);
+
+    expect(await getOrder(db, account, first.sessionId)).toMatchObject({
+      number: first.number,
+      email: "ana@example.test",
+    });
+    expect(await getOrder(db, account, second.sessionId)).toMatchObject({ number: second.number });
+    expect(await getOrder(db, someoneElse, theirs.sessionId)).toMatchObject({ number: theirs.number });
+  });
+
+  it("makes the Order of a Checkout a Guest started before signing in, and paid after, the account's", async () => {
+    const guest = await aGuest();
+    const account = await aUser();
+    await inBag(guest, await aProduct());
+    await start(guest);
+    const session = lastSession();
+
+    await move(guest, account);
+    await deleteGuest(guest);
+    stripe.markPaid(session.id);
+
+    expect(await complete(session.id)).toMatchObject({ status: "completed" });
+    expect(await getOrder(db, account, session.id)).toBeDefined();
+  });
+
+  it("changes nothing for an account when the Guest has no Orders", async () => {
+    const guest = await aGuest();
+    const account = await aUser();
+    const own = await anOrder(account);
+
+    await move(guest, account);
+    await deleteGuest(guest);
+
+    expect(await getOrder(db, account, own.sessionId)).toMatchObject({ number: own.number });
   });
 });
 
