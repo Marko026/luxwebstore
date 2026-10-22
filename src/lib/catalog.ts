@@ -13,9 +13,9 @@ const pexels = (id: string) => `https://www.pexels.com/photo/${id}/`;
 
 export const photos = {
   hero: {
-    src: "/images/home/hero.jpg",
-    alt: "A woman in a white dress seated in a panelled room, holding a woven bag on her lap",
-    source: unsplash("VXQvz1t7uHk"),
+    src: "/images/home/hero-leather-bag.jpg",
+    alt: "A woman in a black wool coat holding a brown leather shoulder bag with two front pockets",
+    source: pexels("19354620"),
   },
   edWomen: {
     src: "/images/home/ed-women.jpg",

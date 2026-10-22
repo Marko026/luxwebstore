@@ -35,7 +35,7 @@ export function Hero() {
           sizes="100vw"
           loading="eager"
           fetchPriority="high"
-          className="object-cover object-[50%_40%]"
+          className="object-cover object-[50%_30%]"
         />
       </div>
       <BottomScrim />
