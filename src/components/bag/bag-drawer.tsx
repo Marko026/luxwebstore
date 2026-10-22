@@ -193,6 +193,11 @@ export function BagDrawer() {
               <p id="checkout-blocked" aria-live="polite" className="mt-3 text-center text-xs text-muted empty:mt-0">
                 {flagged && "Lower or remove the marked items to check out."}
               </p>
+              {/* A demo: Stripe runs in test mode only, so no card is ever charged */}
+              <p className="mt-3 text-center text-xs text-muted">
+                Demo shop, no real payments. Pay with the test card{" "}
+                <span className="whitespace-nowrap">4242 4242 4242 4242</span>, any future date and any CVC.
+              </p>
             </div>
           </>
         )}
