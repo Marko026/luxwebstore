@@ -41,13 +41,11 @@ export default async function NewArrivalsPage() {
               {products.length} {products.length === 1 ? "item" : "items"}
             </p>
           </div>
-          <p className="mt-2 max-w-[48ch] pb-6 text-sm text-muted lg:pb-8">
+          <p className="mt-2 max-w-[48ch] pb-3 text-sm text-muted lg:pb-5">
             The latest bags to reach the atelier, newest first.
           </p>
-          <div className="pb-6 lg:pb-8">
-            <CategoryNav categories={categories} />
-          </div>
         </div>
+        <CategoryNav categories={categories} />
 
         {products.length ? (
           <>

@@ -46,7 +46,7 @@ export default async function ProductsPage() {
           </div>
         </section>
 
-        <div className="flex items-center justify-between px-gutter pt-6 pb-6 text-xs lg:pt-8">
+        <div className="flex items-center justify-between px-gutter pt-6 pb-3 text-xs lg:pt-8">
           <nav aria-label="Breadcrumb" className="text-muted">
             <ol className="flex gap-1.5">
               <li>
@@ -60,9 +60,7 @@ export default async function ProductsPage() {
           </nav>
           <p>{products.length} items</p>
         </div>
-        <div className="px-gutter pb-6 lg:pb-8">
-          <CategoryNav categories={categories} active={null} />
-        </div>
+        <CategoryNav categories={categories} active={null} />
 
         <ul className="grid grid-cols-2">
           {products.map((p) => (
