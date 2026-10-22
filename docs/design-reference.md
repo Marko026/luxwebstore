@@ -159,6 +159,15 @@ packshots than as a dense grid. The tile is `paper`, so white space separates th
 One easing everywhere: **`cubic-bezier(0.5, 0, 0, 1)`, 0.8s** (opacity, transform, colour, max-height),
 and 1.2s for image scale. Slow and smooth, never bouncy. Token: `--ease-lux` / `--dur-lux`.
 
+**Deliberate departure: the hero mask** (spec #47, after Cartier's scroll storytelling). As the home hero scrolls out,
+it draws in from the screen edges to a frame with `--gutter` margins and `radius-sm` corners. Its copy rises by the same
+gutter, so "Shop now" is never clipped. This is the site's one scroll-linked motion:
+- It follows normal scrolling, with no pinning, and is finished by the time half the hero has scrolled away.
+- Its timing is linear, because scroll position drives it; `ease-lux` does not apply.
+- It is CSS only (`animation-timeline: view()`) inside `@supports`, so a browser without scroll-driven animations shows
+  the static hero.
+- It is off under reduced motion.
+
 ---
 
 ## Decisions still open

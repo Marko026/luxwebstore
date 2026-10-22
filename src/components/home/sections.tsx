@@ -25,7 +25,7 @@ export function Hero() {
   return (
     <section
       aria-label="Featured"
-      className="relative isolate h-[67svh] min-h-140 overflow-hidden bg-ink text-paper lg:h-[89svh]"
+      className="hero-mask relative isolate h-[67svh] min-h-140 overflow-hidden bg-ink text-paper lg:h-[89svh]"
     >
       <div className="hero-media absolute inset-0 -z-20">
         <Image
@@ -35,11 +35,11 @@ export function Hero() {
           sizes="100vw"
           loading="eager"
           fetchPriority="high"
-          className="object-cover object-[50%_40%]"
+          className="object-cover object-[50%_30%]"
         />
       </div>
       <BottomScrim />
-      <div className="absolute inset-x-0 bottom-10 flex flex-col items-center gap-4 px-gutter text-center">
+      <div className="hero-copy absolute inset-x-0 bottom-10 flex flex-col items-center gap-4 px-gutter text-center">
         <h1 className="hero-line overflow-hidden font-medium" style={{ "--d": "0.6s" } as CSSProperties}>
           <span className="block">{hero.label}</span>
         </h1>
