@@ -203,7 +203,7 @@ export async function moveCheckoutsAndOrders(db: Db, payments: Payments, fromOwn
   let paidSessionId: string | undefined;
   if (fromOpen && toOpen) {
     // Ids grow with time, so the smaller one started first
-    const [older, newer] = fromOpen.id < toOpen.id ? [fromOpen, toOpen] : [toOpen, fromOpen];
+    const older = fromOpen.id < toOpen.id ? fromOpen : toOpen;
     if ((await closeCheckout(db, payments, older)) === "already-paid") {
       await db
         .update(checkouts)

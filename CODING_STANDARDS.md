@@ -15,6 +15,10 @@ Flag any `.then(...)` or awaited call that sets state and misses one of these tw
 
 A server function or route handler is reachable by a direct POST from anyone. When it writes rows for a caller with no session (for example creating an anonymous user), repeated requests must be bounded by a limit per client (or an idempotency key), with the choice recorded in an ADR. Checking that the request can succeed before anything is created is a useful extra guard, but it does not bound repeated valid requests. Flag any such write that a script could repeat without limit.
 
+## Writes that must land together
+
+When a function makes two or more database writes and a failure between them would leave a state that no code later repairs (for example Checkouts moved to the account while the Orders stay with a Guest about to be deleted), the writes run in one `db.transaction` (ADR 0003), or are folded into one statement. Keep network calls such as Stripe's out of the transaction, so no lock is held while waiting on them. Example: `moveCheckoutsAndOrders` in `src/lib/checkout.ts`. Flag consecutive awaited writes outside a transaction where a crash after the first leaves rows orphaned, half moved or counted twice.
+
 ## Scripts that write auth rows
 
 A seed or dev script that creates or changes users, accounts or sessions touches only identities it owns: an address on the reserved `example.test` domain, never one taken from input as is. It must never reset the password or sessions of an account it did not create. Example: `seedTestUser` in `src/db/seed.ts`. The same goes for credentials in committed files: `.env.example` holds empty values or `@example.test` placeholders, never a usable password.
