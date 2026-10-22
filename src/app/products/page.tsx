@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   description: "Leather handbags, shoulder bags, crossbody bags and men's bags, hand-finished in Italy.",
 };
 
-/** Category page, as on the reference: editorial hero, item count, then a 4-across edge-to-edge grid (2 on a phone). */
+/** Category page, as on the reference: editorial hero, item count, then an edge-to-edge grid of 2 large columns at every width. */
 export default async function ProductsPage() {
   const [products, categories] = await Promise.all([getProducts(), getCategories()]);
 
