@@ -21,7 +21,10 @@ const services: MenuItem = {
     { label: "Store Locator", href: "#services" },
   ],
 };
-const account = ["My Orders", "Contact Us"];
+const account: MenuLink[] = [
+  { label: "My Orders", href: "/account/orders" },
+  { label: "Contact Us", href: "#contact" },
+];
 
 /** Chevron hidden until hover/focus on desktop, always shown beside the label on touch screens. */
 const chevron =
@@ -212,7 +215,9 @@ export function SiteHeaderClient({
             </button>
             {user ? (
               <span className="hidden items-center gap-3 sm:flex ui-label">
-                <span className="max-w-32 truncate">{user.name}</span>
+                <Link href="/account/orders" aria-label={`${user.name}, my orders`} className="link-reveal max-w-32 truncate">
+                  {user.name}
+                </Link>
                 <button type="button" onClick={() => authClient.signOut()} className="link-wipe uppercase">
                   Sign out
                 </button>
@@ -294,10 +299,10 @@ export function SiteHeaderClient({
                 )}
               </li>
               {account.map((item) => (
-                <li key={item}>
-                  <a href="#contact" onClick={close} className="link-wipe">
-                    {item}
-                  </a>
+                <li key={item.label}>
+                  <Link href={item.href} onClick={close} className="link-wipe">
+                    {item.label}
+                  </Link>
                 </li>
               ))}
             </ul>
