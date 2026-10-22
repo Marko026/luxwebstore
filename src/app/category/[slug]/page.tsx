@@ -78,10 +78,10 @@ async function CategoryProducts({ params }: { params: PageProps<"/category/[slug
       </div>
 
       {category.products.length ? (
-        <ul className="grid grid-cols-2 lg:grid-cols-4">
+        <ul className="grid grid-cols-2">
           {category.products.map((p) => (
             <li key={p.slug}>
-              <ProductCard product={p} sizes="(min-width: 1024px) 25vw, 50vw" />
+              <ProductCard product={p} sizes="50vw" />
             </li>
           ))}
         </ul>

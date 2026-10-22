@@ -51,10 +51,10 @@ export default async function NewArrivalsPage() {
 
         {products.length ? (
           <>
-            <ul className="grid grid-cols-2 lg:grid-cols-4">
+            <ul className="grid grid-cols-2">
               {products.map((p) => (
                 <li key={p.slug}>
-                  <ProductCard product={p} sizes="(min-width: 1024px) 25vw, 50vw" />
+                  <ProductCard product={p} sizes="50vw" />
                 </li>
               ))}
             </ul>
