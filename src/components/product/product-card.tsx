@@ -8,7 +8,8 @@ export function ProductCard({ product, sizes }: { product: Product; sizes: strin
   const soldOut = stockState(product.stock) === "sold-out";
 
   return (
-    <Link href={productHref(product.slug)} className="group block text-center">
+    // scroll margin: a card reached by Tab scrolls clear of the fixed header and the pinned category bar
+    <Link href={productHref(product.slug)} className="group block scroll-mt-28 text-center lg:scroll-mt-32">
       <span data-reveal="img" className="relative block aspect-square overflow-hidden">
         {/* The DB allows a product without images: keep the empty tile rather than crash the listing */}
         {photo && (

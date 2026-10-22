@@ -144,6 +144,9 @@ around an image. `tile` stays as its own token for the packshot ground role.
 - Service cards turn into a horizontal swipe row on phone.
 - Footer columns turn into accordions on phone.
 - Sub-category bar is a horizontal scroll on every width.
+  **Deliberate departure:** on the catalog lists it stays pinned under the fixed header while the grid scrolls
+  (spec #47, after Roadster Universe's in-page navigation). It has a paper ground, no line and no shadow. No second bag
+  button: the header has one.
 - PDP: two columns → single column, sticky bottom Add to bag; gallery shows a `1 / 10` counter.
 
 **Deliberate departure:** the catalog lists (`/products`, a category, New Arrivals) show **2 columns at every width**,

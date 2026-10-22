@@ -66,16 +66,14 @@ async function CategoryProducts({ params }: { params: PageProps<"/category/[slug
             <li>{category.name}</li>
           </ol>
         </nav>
-        <div className="flex items-end justify-between gap-4 pt-8 pb-6 lg:pb-8">
+        <div className="flex items-end justify-between gap-4 pt-8 pb-3 lg:pb-5">
           <h1 className="text-2xl font-thin">{category.name}</h1>
           <p className="shrink-0 text-xs">
             {category.products.length} {category.products.length === 1 ? "item" : "items"}
           </p>
         </div>
-        <div className="pb-6 lg:pb-8">
-          <CategoryNav categories={categories} active={slug} />
-        </div>
       </div>
+      <CategoryNav categories={categories} active={slug} />
 
       {category.products.length ? (
         <ul className="grid grid-cols-2">
