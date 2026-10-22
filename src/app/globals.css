@@ -268,6 +268,23 @@
       animation-delay: var(--d, 0s);
     }
 
+    /* Hero mask (spec #47): as the home hero scrolls out, it draws in from the screen edges to a frame with gutter
+       margins, following normal scrolling (no pinning). The copy rises by the same gutter, so the bottom inset never
+       clips "Shop now". Browsers without scroll-driven animations keep the static hero. */
+    @supports (animation-timeline: view()) {
+      .hero-mask {
+        view-timeline: --hero block;
+        animation: hero-frame linear both;
+        animation-timeline: --hero;
+        animation-range: exit 0% exit 50%;
+      }
+      .hero-copy {
+        animation: hero-lift linear both;
+        animation-timeline: --hero;
+        animation-range: exit 0% exit 50%;
+      }
+    }
+
     /* Scroll reveals. `.js` is set in <head> before first paint, so nothing flashes. */
     .js [data-reveal="img"] img {
       scale: 1.2;
@@ -293,6 +310,21 @@
   @keyframes settle {
     from {
       scale: 1.2;
+    }
+  }
+
+  @keyframes hero-frame {
+    from {
+      clip-path: inset(0 0 0 0 round 0);
+    }
+    to {
+      clip-path: inset(var(--gutter) var(--gutter) var(--gutter) var(--gutter) round var(--radius-sm));
+    }
+  }
+
+  @keyframes hero-lift {
+    to {
+      translate: 0 calc(-1 * var(--gutter));
     }
   }
 
