@@ -41,7 +41,7 @@ One attempt to pay for a Bag. It starts only when every Bag item is in Stock at 
 _Avoid_: Payment session, pending order
 
 **Order**:
-What a Customer has bought and paid for. An Order exists only once its Checkout is paid; until then there is no Order. It keeps its own email and delivery address, so it outlives a Guest who is deleted.
+What a Customer has bought and paid for. An Order exists only once its Checkout is paid; until then there is no Order. It keeps its own email and delivery address, so it outlives a Guest who is deleted. It belongs to the Guest or User who paid for it; when a Guest signs in or signs up, their Orders become that User's, whatever email the account has. A Guest deleted before signing in leaves their Orders with no owner.
 _Avoid_: Purchase, sale
 
 **Order number**:
